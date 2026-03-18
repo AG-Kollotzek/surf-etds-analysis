@@ -7,7 +7,8 @@ Dieses Repository dient der automatisierten Auswertung und dem Vergleich von zwe
 
   - ExacTrac (ETD) Scanner: Aufgezeichnete Tracking-Logs des SGRT-Systems via .json.
 
-Kernfunktionen: > * Automatisches Time-Alignment beider Datenströme (z.B. über 5mm Referenz-Peaks).
+Kernfunktionen: 
+  * Automatisches Time-Alignment beider Datenströme (z.B. über 5mm Referenz-Peaks).
 
   * Plateau- und Flankenerkennung zur Evaluierung von stationären Endpositionen (Mittelwert & Standardabweichung).
 
