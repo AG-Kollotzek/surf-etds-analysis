@@ -1,6 +1,7 @@
 import os
 from DataConverter import ETDQAProcessor
 from pathlib import Path
+import datetime
 
 
 def main():
@@ -9,8 +10,8 @@ def main():
     # 1. Pfade zu deinen Testdaten definieren
     # HINWEIS: Passe diese Pfade an die Struktur deines Repos an.
     data_dir = Path('path/to/SURF/20260310_Messung_4/20260310_messung4')
-    csv_full_path = data_dir / "csv" / "ETD_QA_PoP_SingleCouchOrientation_20260310_182011.csv"
-    json_full_path = data_dir / "01_json" / "TrackingResult_2026-03-10_18-23-37.json"
+    csv_full_path = data_dir / "csv" / "ETD_QA_PoP_SingleCouchOrientation_20260310_175824.csv"
+    json_full_path = data_dir / "01_json" / "TrackingResult_2026-03-10_18-01-08.json"
 
     # --- NEU: INTERAKTIVE ABFRAGE ---
     # Fragt den Nutzer nach dem Typ (z.B. 'Baseline', 'Longitudinal_5mm' oder 'Couch_90')
