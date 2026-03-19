@@ -9,9 +9,9 @@ def main():
     # HINWEIS: Passe diese Pfade an die Struktur deines Repos an.
     # Hier nutze ich die Namen der Dateien, die du hochgeladen hast.
     # (Achtung: Für ein echtes Alignment sollten CSV und JSON natürlich aus derselben Messung stammen!)
-    data_dir = Path(r'path\to\SURF\20260310_Messung_4\20260310_messung4')
-    csv_full_path = data_dir / "csv" / "ETD_QA_PoP_SingleCouchOrientation_20260310_182433.csv"
-    json_full_path = data_dir / "01_json" / "TrackingResult_2026-03-10_18-26-30.json"
+    data_dir = Path('path/to/SURF/20260310_Messung_4/20260310_messung4')
+    csv_full_path = data_dir / "csv" / "ETD_QA_PoP_SingleCouchOrientation_20260310_182011.csv"
+    json_full_path = data_dir / "01_json" / "TrackingResult_2026-03-10_18-23-37.json"
 
     # Prüfen, ob die Dateien existieren, bevor wir starten
     if not os.path.exists(csv_full_path):
@@ -32,7 +32,7 @@ def main():
     print(f"Lade JSON-Daten: {os.path.basename(json_full_path)}...")
     processor.load_json(json_full_path)
     print("JSON erfolgreich geladen.")
-
+    print(processor.df_json)
     #Kinematik anwenden
     processor.apply_kinematics(couch_angle=0.0)
 
@@ -45,7 +45,10 @@ def main():
         print(f"Fehler beim Alignment: {e}")
         return
 
-    # 5. Visuelle Kontrolle (öffnet einen interaktiven Graphen im Browser)
+    # 5. NEU: Gezielte Baseline-Korrektur und Abschneiden des Leerlaufs
+    processor.apply_baseline_and_crop()
+
+    # 6. Visuelle Kontrolle
     print("Erstelle Plot zur visuellen Kontrolle...")
     processor.plot_sync_check()
 

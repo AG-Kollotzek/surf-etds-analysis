@@ -16,7 +16,7 @@ class SurfKinematics:
         # Distanzen Phantom zu H-Schlitten in Home-Position
         rotatationTable_height = ufloat(130, ERR)
         phantomCenterDistance = ufloat(75, ERR)
-        phantomToTableDistance = ufloat(15, ERR) #Nachmessen!
+        phantomToTableDistance = ufloat(21, 0.5) #Nachmessen!
         self.sliderShift = ufloat(30, ERR) + ufloat(16, ERR) # Abstand Unterkante zu achse # Hälfte des Schlittens (Schlitten fährt auf mittigem loch)
         self.radius = rotatationTable_height + phantomToTableDistance + phantomCenterDistance + self.sliderShift
 
@@ -43,10 +43,10 @@ class SurfKinematics:
         pitch_rad_local = unp.arcsin((self.hAxis_vertical + v_u) / self.hAxis_diagonal) - alpha_offset
         pitch_deg_local = unp.degrees(pitch_rad_local)
 
-        rollOffset = self.hAxis_horizontal - unp.sqrt(self.hAxis_diagonal ** 2 - (self.hAxis_vertical - v_u) **2) #Wie verschiebt sich die rollunterlage vom schlitten, je nach kippung?
-        y_local = self.radius * unp.sin(pitch_rad_local) - rollOffset + ( h_u * unp.cos(pitch_rad_local))
+        rollOffset = self.hAxis_horizontal - unp.sqrt(self.hAxis_diagonal ** 2 - (self.hAxis_vertical + v_u) **2) #Wie verschiebt sich die rollunterlage vom schlitten, je nach kippung?
+        y_local = -(self.radius + self.hAxis_vertical) * unp.sin(pitch_rad_local) + rollOffset + ( h_u * unp.cos(pitch_rad_local))
         x_local = h_u * 0
-        z_local = self.radius * (1 - unp.cos(pitch_rad_local)) + (h_u * unp.sin(pitch_rad_local))
+        z_local = - self.radius * (1 - unp.cos(pitch_rad_local)) - (h_u * unp.sin(pitch_rad_local))
         yaw_deg_local = unp.degrees(r_u * unp.cos(pitch_rad_local))
         roll_deg_local = unp.degrees(r_u * unp.sin(pitch_rad_local))
 

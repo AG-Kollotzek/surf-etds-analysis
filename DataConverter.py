@@ -56,142 +56,159 @@ class ETDQAProcessor:
         return self.df_json
 
     def apply_kinematics(self, couch_angle=0.0):
-        """Berechnet die klinischen Koordinaten und speichert sie im DataFrame."""
+        """Berechnet klinische Koordinaten und bereitet Fehler-Tubes vor (OHNE Baseline-Nullung)."""
         print("Berechne kinematische Transformation in klinische Koordinaten...")
         kin = SurfKinematics()
 
-        # 1. Raw-Daten holen
-        h_raw = self.df_csv['Pos_H'].values
-        v_raw = self.df_csv['Pos_V'].values
-        r_raw = self.df_csv['Pos_R'].values
+        # Berechnung (ohne Nullen)
+        res = kin.calculate_task_space(self.df_csv['Pos_H'].values,
+                                       self.df_csv['Pos_V'].values,
+                                       self.df_csv['Pos_R'].values, couch_angle)
 
-        # 2. Berechnung inkl. Fehlerfortpflanzung durchführen
-        res = kin.calculate_task_space(h_raw, v_raw, r_raw, couch_angle)
-
-        # 3. WICHTIG: ufloats entpacken! Pandas & Plotly brauchen reine Floats.
-        # unp.nominal_values holt den reinen Zahlenwert.
-        self.df_csv['True_Lateral'] = unp.nominal_values(res['True_Lateral'])
-        self.df_csv['True_Longitudinal'] = unp.nominal_values(res['True_Longitudinal'])
-        self.df_csv['True_Vertical'] = unp.nominal_values(res['True_Vertical'])
-        self.df_csv['True_Pitch'] = unp.nominal_values(res['True_Pitch'])
-        self.df_csv['True_Roll'] = unp.nominal_values(res['True_Roll'])
-        self.df_csv['True_Yaw'] = unp.nominal_values(res['True_Yaw'])
-
-        # (Optional) Du könntest hier auch die Fehler für Error-Bars speichern:
-        # self.df_csv['Err_Lateral'] = unp.std_devs(res['True_Lateral'])
+        for key, uarray in res.items():
+            self.df_csv[key] = unp.nominal_values(uarray)
+            self.df_csv[f"{key}_std"] = unp.std_devs(uarray)
+            self.df_csv[f"{key}_upper"] = self.df_csv[key] + self.df_csv[f"{key}_std"]
+            self.df_csv[f"{key}_lower"] = self.df_csv[key] - self.df_csv[f"{key}_std"]
 
     def align_signals(self, sync_axis='Pos_H', threshold=4.5):
-        """
-        Implementiert die MATLAB-Sync-Logik:
-        1. Findet Mitten des ersten und letzten Peaks.
-        2. Berechnet Offset UND Skalierungsfaktor für Clock-Drift Korrektur.
-        """
+        """Synchronisiert und speichert die exakten Zeiten der Peaks für das spätere Cropping."""
 
-        def get_peak_midpoints(times, values, thresh):
-            # Debouncing/Smoothing wie in MATLAB (movmedian 5)
+        def get_peak_info(times, values, thresh):
             v_smooth = pd.Series(values).rolling(window=5, center=True).median().fillna(0).values
             mask = np.abs(v_smooth) > thresh
 
-            # Finde Kanten (Edges)
+            # Finde Kanten
             edges = np.diff(mask.astype(int), prepend=0, append=0)
             starts = np.where(edges == 1)[0]
+            # Korrektur: Wir nehmen den Index des letzten 'True' Werts
             ends = np.where(edges == -1)[0] - 1
 
             if len(starts) < 2:
-                return None, None
+                return None, None, None, None
 
-            # Mitten des ersten und letzten Peaks berechnen
-            # (Index-Mitte und dann die entsprechende Zeit holen)
-            t_first = times.iloc[int(round((starts[0] + ends[0]) / 2))]
-            t_last = times.iloc[int(round((starts[-1] + ends[-1]) / 2))]
+            # --- BIAS-FIX: FLOAT-PRÄZISION STATT INT-RUNDUNG ---
+            # Wir nehmen den zeitlichen Mittelpunkt zwischen Start und Ende der Flanken
+            t_first_mid = (times.iloc[starts[0]] + times.iloc[ends[0]]) / 2.0
+            t_last_mid = (times.iloc[starts[-1]] + times.iloc[ends[-1]]) / 2.0
 
-            return t_first, t_last
+            t_first_start = times.iloc[starts[0]]
+            t_last_end = times.iloc[ends[-1]]
 
-        # 1. Peak-Mitten finden
-        csv_first, csv_last = get_peak_midpoints(self.df_csv['Time_Sec'], self.df_csv[sync_axis], threshold)
-        json_first, json_last = get_peak_midpoints(self.df_json['Time_Sec'], self.df_json['Vector_Mag'], threshold)
+            return t_first_mid, t_last_mid, t_first_start, t_last_end
+
+        # Peak-Zeiten ermitteln
+        csv_first, csv_last, csv_start, csv_end = get_peak_info(self.df_csv['Time_Sec'], self.df_csv[sync_axis],
+                                                                threshold)
+        json_first, json_last, _, _ = get_peak_info(self.df_json['Time_Sec'], self.df_json['Vector_Mag'], threshold)
 
         if csv_first is None or json_first is None:
-            raise ValueError("Nicht genügend 5mm Peaks (erster & letzter) für Sync gefunden.")
+            raise ValueError("Nicht genügend 5mm Peaks für Sync gefunden.")
 
-        # 2. Delta Zeiten berechnen
-        delta_t_csv = csv_last - csv_first
-        delta_t_json = json_last - json_first
-
-        # 3. Skalierungsfaktor berechnen (Clock Drift Kompensation)
-        scale_factor = delta_t_csv / delta_t_json
-
-        # 4. Die JSON Zeitachse permanent transformieren
-        # Wir setzen den ersten CSV-Peak als Nullpunkt und skalieren von dort aus
+        scale_factor = (csv_last - csv_first) / (json_last - json_first)
         self.df_json['Time_Sec'] = (self.df_json['Time_Sec'] - json_first) * scale_factor + csv_first
-
-        # Der Offset ist nun 0, da wir die Spalte direkt transformiert haben
         self.time_offset = 0
 
-        print(f"Sync erfolgreich:")
-        print(f" -> Skalierungsfaktor: {scale_factor:.6f}")
-        print(f" -> Referenz-Peak bei: {csv_first:.2f} s")
+        # WICHTIG: Start und Ende für die Baseline-Korrektur speichern
+        self.sync_t_start = csv_start
+        self.sync_t_end = csv_end
 
+        print(f"Sync erfolgreich (Skalierung: {scale_factor:.6f}, Referenz-Peak: {csv_first:.2f}s)")
         return scale_factor
 
+    def apply_baseline_and_crop(self):
+        """Nullt die Achsen präzise an den Sync-Peaks und schneidet Vorlauf ab."""
+        if not hasattr(self, 'sync_t_start'):
+            print("FEHLER: Führe zuerst align_signals() aus!")
+            return
+
+        t_start = self.sync_t_start
+        t_end = self.sync_t_end
+        csv_time = self.df_csv['Time_Sec']
+
+        # 1. Smarte Maske: Wir nehmen exakt das Fenster 1 bis 6 Sekunden VOR dem ersten Peak
+        # und 1 bis 6 Sekunden NACH dem letzten Peak (um aus den Flanken raus zu sein).
+        base_mask = ((csv_time >= t_start - 6.0) & (csv_time <= t_start - 1.0)) | \
+                    ((csv_time >= t_end + 1.0) & (csv_time <= t_end + 6.0))
+
+        if not base_mask.any():
+            base_mask = (csv_time < t_start)  # Fallback
+
+        print(f"Führe Baseline-Korrektur durch (Referenzfenster: {base_mask.sum()} Punkte)...")
+
+        # 2. Offset von allen kinematischen Spalten (inkl. Schläuche) abziehen
+        keys = ['True_Lateral', 'True_Longitudinal', 'True_Vertical', 'True_Pitch', 'True_Roll', 'True_Yaw']
+        for key in keys:
+            offset = np.median(self.df_csv.loc[base_mask, key])
+            self.df_csv[key] -= offset
+            self.df_csv[f"{key}_upper"] -= offset
+            self.df_csv[f"{key}_lower"] -= offset
+
+        # 3. Cropping: Wir schneiden alles ab, was mehr als 5 Sekunden vor dem ersten Peak liegt
+        crop_time = t_start - 5.0
+        self.df_csv = self.df_csv[self.df_csv['Time_Sec'] >= crop_time].reset_index(drop=True)
+        self.df_json = self.df_json[self.df_json['Time_Sec'] >= crop_time].reset_index(drop=True)
+
+        print(f"-> Daten gecroppt. Plot startet nun exakt 5s vor dem ersten Peak.")
+
     def plot_sync_check(self):
-        """
-        Visualisierung der synchronisierten Daten.
-        WICHTIG: Da die Zeitachse in align_signals() bereits transformiert wurde,
-        nutzen wir hier direkt self.df_json['Time_Sec'] ohne extra Offset.
-        """
+        """Visualisierung aller 6 DoF inkl. Unsicherheits-Schläuchen."""
 
-        # --- PLOT 1: TRANSLATIONEN (Linear Shifts) ---
-        fig1 = go.Figure()
+        def _add_uncertainty_trace(fig, df, key, color, name):
+            # 1. Der Unsicherheits-Schlauch (Transparente Fläche)
+            fig.add_trace(go.Scatter(
+                x=np.concatenate([df['Time_Sec'], df['Time_Sec'][::-1]]),
+                y=np.concatenate([df[f"{key}_upper"], df[f"{key}_lower"][::-1]]),
+                fill='toself',
+                fillcolor=color.replace('rgb', 'rgba').replace(')', ', 0.2)'),
+                line=dict(color='rgba(255,255,255,0)'),
+                hoverinfo="skip",
+                showlegend=False,
+                name=f"{name} Uncert."
+            ))
+            # 2. Die nominelle SURF-Linie (gestrichelt)
+            fig.add_trace(go.Scatter(
+                x=df['Time_Sec'], y=df[key],
+                name=f"SURF {name}",
+                line=dict(color=color, width=2, dash='dash')
+            ))
 
-        # ETD Rohdaten (bereits synchronisiert)
-        fig1.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['lateral'],
-                                  name="ETD Lateral (X)", line=dict(color='red')))
-        fig1.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['longitudinal'],
-                                  name="ETD Longitudinal (Y)", line=dict(color='green')))
-        fig1.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['vertical'],
-                                  name="ETD Vertical (Z)", line=dict(color='blue')))
+        # --- FIGUR 1: TRANSLATIONEN (X, Y, Z) ---
+        fig_trans = go.Figure()
 
-        # SURF Ground Truth (JETZT KLINISCHE KOORDINATEN)
-        fig1.add_trace(go.Scatter(x=self.df_csv['Time_Sec'], y=self.df_csv['True_Lateral'],
-                                  name="SURF True Lateral (X)", line=dict(color='darkred', width=2, dash='dash')))
-        fig1.add_trace(go.Scatter(x=self.df_csv['Time_Sec'], y=self.df_csv['True_Longitudinal'],
-                                  name="SURF True Long. (Y)", line=dict(color='darkgreen', width=2, dash='dash')))
-        fig1.add_trace(go.Scatter(x=self.df_csv['Time_Sec'], y=self.df_csv['True_Vertical'],
-                                  name="SURF True Vertical (Z)", line=dict(color='darkblue', width=2, dash='dash')))
+        # ETD Daten (Durchgezogen)
+        fig_trans.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['lateral'], name="ETD Lateral (X)",
+                                       line=dict(color='red')))
+        fig_trans.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['longitudinal'], name="ETD Long. (Y)",
+                                       line=dict(color='green')))
+        fig_trans.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['vertical'], name="ETD Vert. (Z)",
+                                       line=dict(color='blue')))
 
-        fig1.update_layout(
-            title=f"Synchronisations-Check: Translationen (Mode: {self.terminal_version})",
-            xaxis_title="Zeit [s]",
-            yaxis_title="Position [mm]",
-            hovermode="x unified"
-        )
-        fig1.show()
+        # SURF Daten (Gestrichelt + Schlauch)
+        _add_uncertainty_trace(fig_trans, self.df_csv, 'True_Lateral', 'rgb(255, 0, 0)', 'Lat (X)')
+        _add_uncertainty_trace(fig_trans, self.df_csv, 'True_Longitudinal', 'rgb(0, 255, 0)', 'Long (Y)')
+        _add_uncertainty_trace(fig_trans, self.df_csv, 'True_Vertical', 'rgb(0, 0, 255)', 'Vert (Z)')
 
-        # --- PLOT 2: ROTATIONEN (Angular Shifts) ---
-        fig2 = go.Figure()
+        fig_trans.update_layout(title="6 DoF Check: Translationen", xaxis_title="Zeit [s]", yaxis_title="Position [mm]",
+                                hovermode="x unified")
+        fig_trans.show()
 
-        # ETD Rotationen (bereits synchronisiert)
-        fig2.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['pitch'],
-                                  name="ETD Pitch", line=dict(color='orange')))
-        fig2.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['roll'],
-                                  name="ETD Roll", line=dict(color='purple')))
-        fig2.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['yaw'],
-                                  name="ETD Yaw", line=dict(color='brown')))
+        # --- FIGUR 2: ROTATIONEN (Pitch, Roll, Yaw) ---
+        fig_rot = go.Figure()
 
+        # ETD Daten
+        fig_rot.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['pitch'], name="ETD Pitch",
+                                     line=dict(color='orange')))
+        fig_rot.add_trace(
+            go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['roll'], name="ETD Roll", line=dict(color='purple')))
+        fig_rot.add_trace(
+            go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['yaw'], name="ETD Yaw", line=dict(color='brown')))
 
-        # SURF Ground Truth (JETZT KLINISCHE KOORDINATEN)
-        fig2.add_trace(go.Scatter(x=self.df_csv['Time_Sec'], y=self.df_csv['True_Pitch'],
-                                  name="SURF True Pitch", line=dict(color='darkorange', width=2, dash='dash')))
-        fig2.add_trace(go.Scatter(x=self.df_csv['Time_Sec'], y=self.df_csv['True_Roll'],
-                                  name="SURF True Roll", line=dict(color='purple', width=2, dash='dash')))
-        fig2.add_trace(go.Scatter(x=self.df_csv['Time_Sec'], y=self.df_csv['True_Yaw'],
-                                  name="SURF True Yaw", line=dict(color='black', width=2, dash='dash')))
+        # SURF Daten
+        _add_uncertainty_trace(fig_rot, self.df_csv, 'True_Pitch', 'rgb(255, 165, 0)', 'Pitch')
+        _add_uncertainty_trace(fig_rot, self.df_csv, 'True_Roll', 'rgb(128, 0, 128)', 'Roll')
+        _add_uncertainty_trace(fig_rot, self.df_csv, 'True_Yaw', 'rgb(165, 42, 42)', 'Yaw')
 
-        fig2.update_layout(
-            title=f"Synchronisations-Check: Rotationen (Mode: {self.terminal_version})",
-            xaxis_title="Zeit [s]",
-            yaxis_title="Winkel [°]",
-            hovermode="x unified"
-        )
-        fig2.show()
+        fig_rot.update_layout(title="6 DoF Check: Rotationen", xaxis_title="Zeit [s]", yaxis_title="Winkel [°]",
+                              hovermode="x unified")
+        fig_rot.show()
