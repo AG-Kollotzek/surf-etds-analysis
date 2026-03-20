@@ -1,27 +1,9 @@
 import os
-import sys
-import datetime
 from pathlib import Path
 from DataConverter import ETDQAProcessor
 
-
-# --- NEU: Der Logger, der sich in den Print-Befehl einklinkt ---
-class DualLogger(object):
-    def __init__(self, log_filepath):
-        self.terminal = sys.stdout
-        # Wir öffnen die Log-Datei im Modus 'a' (append) oder 'w' (write)
-        self.log = open(log_filepath, "w", encoding="utf-8")
-
-    def write(self, message):
-        self.terminal.write(message)
-        self.log.write(message)
-
-    def flush(self):
-        self.terminal.flush()
-        self.log.flush()
-
-
 # Automatisch aus dem Protokoll extrahierte Zuordnung
+# Format: 'Messungs_ID': {'Gruppe': 'Gruppenname', 'ETD': 'JSON_Zeitcode', 'CSV': 'CSV_Zeitcode'}
 MEASUREMENTS = {
     '1': {'Gruppe': 'Standardmessung', 'ETD': '160617', 'CSV': '160448'},
     '2': {'Gruppe': 'Standardmessung', 'ETD': '161117', 'CSV': '160950'},
@@ -51,6 +33,8 @@ MEASUREMENTS = {
 
 
 def main():
+    print("=== STARTE AUTOMATISCHE BATCH-EVALUIERUNG ===")
+
     # BASIS-VERZEICHNIS ANPASSEN!
     data_dir = Path('path/to/SURF/20260310_Messung_4/20260310_messung4')
 
@@ -58,39 +42,29 @@ def main():
     results_base_dir = data_dir / "03_Ergebnisse"
     results_base_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- LOGGING INITIALISIEREN ---
-    log_filename = results_base_dir / f"Batch_Run_Log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    sys.stdout = DualLogger(str(log_filename))  # Alle Prints abfangen!
-
-    print("==================================================")
-    print(f"STARTE AUTOMATISCHE BATCH-EVALUIERUNG")
-    print(f"Zeitpunkt: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("==================================================\n")
-
+    # Schleife durch alle im Wörterbuch definierten Messungen
     for meas_id, data in MEASUREMENTS.items():
         gruppe = data['Gruppe']
-        etd_code = data['ETD']  # z.B. '180108'
-        csv_code = data['CSV']  # z.B. '175824'
+        etd_code = data['ETD']
+        csv_code = data['CSV']
 
         print(f"\n[{gruppe.upper()}] ---> Verarbeite Messung {meas_id}")
-        print("-" * 50)
 
+        # Ordnerstruktur anlegen (z.B. 03_Ergebnisse/Rotation/Messung_10/)
         out_dir = results_base_dir / gruppe / f"Messung_{meas_id}"
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Bindestriche für die JSON-Suche einfügen
-        etd_search_str = f"{etd_code[:2]}-{etd_code[2:4]}-{etd_code[4:]}"
-
-        # Finde die Dateien rekursiv
+        # Finde die Dateien rekursiv (egal in welchem Unterordner sie im Rohdaten-Verzeichnis liegen)
+        # rglob durchsucht alle Ordner nach Dateien, die mit dem Code enden
         csv_files = list(data_dir.rglob(f"*{csv_code}.csv"))
-        json_files = list(data_dir.rglob(f"*{etd_search_str}.json"))
+        json_files = list(data_dir.rglob(f"*{etd_code}.json"))
 
         if not csv_files or not json_files:
-            print(f"   [!] FEHLER: Dateien für Messung {meas_id} übersprungen!")
-            if not csv_files: print(f"       -> CSV-Code *{csv_code}.csv nicht gefunden.")
-            if not json_files: print(f"       -> JSON-Code *{etd_search_str}.json nicht gefunden.")
+            print(
+                f"   [!] ÜBERSPRUNGEN: Dateien für Messung {meas_id} (CSV: {csv_code}, ETD: {etd_code}) nicht im Ordner gefunden.")
             continue
 
+        # Nimm den ersten Treffer
         csv_path = str(csv_files[0])
         json_path = str(json_files[0])
 
@@ -105,24 +79,16 @@ def main():
             processor.align_signals()
             processor.apply_baseline_and_crop()
 
-            # 3. Plateaus auswerten
+            # 3. Plateaus auswerten (die flexible kinetische Version von vorhin)
             csv_output = out_dir / f"QA_Report_Messung_{meas_id}.csv"
             processor.evaluate_plateaus_and_export(output_file=str(csv_output))
 
-            # 4. Plots speichern
+            # 4. NEU: Alle 3 Plots speichern
             processor.export_all_plots(output_dir=str(out_dir), prefix=f"M{meas_id}")
-            print(f"   [✓] SUCCESS: Messung {meas_id} erfolgreich verarbeitet und gespeichert.")
+            print(f"   [✓] Messung {meas_id} erfolgreich abgeschlossen!")
 
         except Exception as e:
-            # Das fängt jeden Fehler (Code-Crash, Division durch 0 etc.) auf und schreibt ihn ins Log
-            print(f"   [X] CRITICAL ERROR bei Messung {meas_id}: {e}")
-            import traceback
-            print(traceback.format_exc())  # Druckt die genaue Zeile des Fehlers für leichtes Debugging
-
-    print("\n==================================================")
-    print("BATCH-EVALUIERUNG BEENDET")
-    print(f"Log-Datei gespeichert unter: {log_filename}")
-    print("==================================================")
+            print(f"   [X] FEHLER bei Messung {meas_id}: {e}")
 
 
 if __name__ == "__main__":

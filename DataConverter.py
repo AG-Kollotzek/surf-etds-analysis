@@ -361,3 +361,72 @@ class ETDQAProcessor:
 
         print(f"-> Report mit {len(results)} validen Messpunkten gespeichert in '{output_file}'.")
         return df_results
+
+    def export_all_plots(self, output_dir, prefix=""):
+        """
+        Erzeugt drei Plotly-Graphen (Translation, Rotation, Raw-Motors)
+        und speichert sie direkt als PNG-Dateien im angegebenen Ordner ab.
+        """
+        import os
+        print("Generiere und speichere Plots...")
+
+        def _add_uncertainty_trace(fig, df, key, color, name):
+            fig.add_trace(go.Scatter(
+                x=np.concatenate([df['Time_Sec'], df['Time_Sec'][::-1]]),
+                y=np.concatenate([df[f"{key}_upper"], df[f"{key}_lower"][::-1]]),
+                fill='toself',
+                fillcolor=color.replace('rgb', 'rgba').replace(')', ', 0.2)'),
+                line=dict(color='rgba(255,255,255,0)'),
+                hoverinfo="skip", showlegend=False
+            ))
+            fig.add_trace(go.Scatter(
+                x=df['Time_Sec'], y=df[key], name=f"SURF {name}",
+                line=dict(color=color, width=2, dash='dash')
+            ))
+
+        # --- PLOT 1: TRANSLATIONEN ---
+        fig_trans = go.Figure()
+        fig_trans.add_trace(
+            go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['lateral'], name="ETD X", line=dict(color='red')))
+        fig_trans.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['longitudinal'], name="ETD Y",
+                                       line=dict(color='green')))
+        fig_trans.add_trace(
+            go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['vertical'], name="ETD Z", line=dict(color='blue')))
+        _add_uncertainty_trace(fig_trans, self.df_csv, 'True_Lateral', 'rgb(255, 0, 0)', 'Lat (X)')
+        _add_uncertainty_trace(fig_trans, self.df_csv, 'True_Longitudinal', 'rgb(0, 255, 0)', 'Long (Y)')
+        _add_uncertainty_trace(fig_trans, self.df_csv, 'True_Vertical', 'rgb(0, 0, 255)', 'Vert (Z)')
+        fig_trans.update_layout(title=f"{prefix}: Translationen (ETD vs SURF)", xaxis_title="Zeit [s]",
+                                yaxis_title="Position [mm]")
+
+        # --- PLOT 2: ROTATIONEN ---
+        fig_rot = go.Figure()
+        fig_rot.add_trace(go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['pitch'], name="ETD Pitch",
+                                     line=dict(color='orange')))
+        fig_rot.add_trace(
+            go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['roll'], name="ETD Roll", line=dict(color='purple')))
+        fig_rot.add_trace(
+            go.Scatter(x=self.df_json['Time_Sec'], y=self.df_json['yaw'], name="ETD Yaw", line=dict(color='brown')))
+        _add_uncertainty_trace(fig_rot, self.df_csv, 'True_Pitch', 'rgb(255, 165, 0)', 'Pitch')
+        _add_uncertainty_trace(fig_rot, self.df_csv, 'True_Roll', 'rgb(128, 0, 128)', 'Roll')
+        _add_uncertainty_trace(fig_rot, self.df_csv, 'True_Yaw', 'rgb(165, 42, 42)', 'Yaw')
+        fig_rot.update_layout(title=f"{prefix}: Rotationen (ETD vs SURF)", xaxis_title="Zeit [s]",
+                              yaxis_title="Winkel [°]")
+
+        # --- PLOT 3: RAW MOTOR VALUES DER TEST UNIT ---
+        fig_raw = go.Figure()
+        fig_raw.add_trace(go.Scatter(x=self.df_csv['Time_Sec'], y=self.df_csv['Pos_H'], name="Motor H (Long/Lat)",
+                                     line=dict(color='blue')))
+        fig_raw.add_trace(go.Scatter(x=self.df_csv['Time_Sec'], y=self.df_csv['Pos_V'], name="Motor V (Vert/Pitch)",
+                                     line=dict(color='green')))
+        fig_raw.add_trace(go.Scatter(x=self.df_csv['Time_Sec'], y=self.df_csv['Pos_R'], name="Motor R (Rotation)",
+                                     line=dict(color='red')))
+        fig_raw.update_layout(title=f"{prefix}: Rohdaten TestUnit (Hardware)", xaxis_title="Zeit [s]",
+                              yaxis_title="Position [mm / Grad]")
+
+        # --- SPEICHERN ---
+        try:
+            fig_trans.write_image(os.path.join(output_dir, f"{prefix}_Plot_Translation.png"), scale=2)
+            fig_rot.write_image(os.path.join(output_dir, f"{prefix}_Plot_Rotation.png"), scale=2)
+            fig_raw.write_image(os.path.join(output_dir, f"{prefix}_Plot_RawMotors.png"), scale=2)
+        except ValueError as e:
+            print(f"WARNUNG: Plot konnte nicht gespeichert werden. Fehlt 'kaleido'? Error: {e}")
