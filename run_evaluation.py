@@ -67,62 +67,34 @@ def main():
     print(f"Zeitpunkt: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("==================================================\n")
 
-    for meas_id, data in MEASUREMENTS.items():
-        gruppe = data['Gruppe']
-        etd_code = data['ETD']  # z.B. '180108'
-        csv_code = data['CSV']  # z.B. '175824'
 
-        print(f"\n[{gruppe.upper()}] ---> Verarbeite Messung {meas_id}")
-        print("-" * 50)
 
-        out_dir = results_base_dir / gruppe / f"Messung_{meas_id}"
-        out_dir.mkdir(parents=True, exist_ok=True)
+    processor = ETDQAProcessor(terminal_version='legacy')
+    try:
+        # 1. Daten laden und aufbereiten
+        processor.load_csv(csv_path)
+        processor.load_json(json_path)
+        processor.apply_kinematics(couch_angle=0.0)
 
-        # Bindestriche für die JSON-Suche einfügen
-        etd_search_str = f"{etd_code[:2]}-{etd_code[2:4]}-{etd_code[4:]}"
+        # 2. Alignment und Nullung
+        processor.align_signals()
+        processor.apply_baseline_and_crop()
 
-        # Finde die Dateien rekursiv
-        csv_files = list(data_dir.rglob(f"*{csv_code}.csv"))
-        json_files = list(data_dir.rglob(f"*{etd_search_str}.json"))
+        # 3. Plateaus auswerten
+        csv_output = out_dir / f"QA_Report_Messung_{meas_id}.csv"
+        processor.evaluate_plateaus_and_export(output_file=str(csv_output))
 
-        if not csv_files or not json_files:
-            print(f"   [!] FEHLER: Dateien für Messung {meas_id} übersprungen!")
-            if not csv_files: print(f"       -> CSV-Code *{csv_code}.csv nicht gefunden.")
-            if not json_files: print(f"       -> JSON-Code *{etd_search_str}.json nicht gefunden.")
-            continue
+        # 4. Plots speichern
+        processor.export_all_plots(output_dir=str(out_dir), prefix=f"M{meas_id}")
+        print(f"   [✓] SUCCESS: Messung {meas_id} erfolgreich verarbeitet und gespeichert.")
 
-        csv_path = str(csv_files[0])
-        json_path = str(json_files[0])
+    except Exception as e:
+        # Das fängt jeden Fehler (Code-Crash, Division durch 0 etc.) auf und schreibt ihn ins Log
+        print(f"   [X] CRITICAL ERROR bei Messung {meas_id}: {e}")
+        import traceback
+        print(traceback.format_exc())  # Druckt die genaue Zeile des Fehlers für leichtes Debugging
 
-        processor = ETDQAProcessor(terminal_version='legacy')
-        try:
-            # 1. Daten laden und aufbereiten
-            processor.load_csv(csv_path)
-            processor.load_json(json_path)
-            processor.apply_kinematics(couch_angle=0.0)
 
-            # 2. Alignment und Nullung
-            processor.align_signals()
-            processor.apply_baseline_and_crop()
-
-            # 3. Plateaus auswerten
-            csv_output = out_dir / f"QA_Report_Messung_{meas_id}.csv"
-            processor.evaluate_plateaus_and_export(output_file=str(csv_output))
-
-            # 4. Plots speichern
-            processor.export_all_plots(output_dir=str(out_dir), prefix=f"M{meas_id}")
-            print(f"   [✓] SUCCESS: Messung {meas_id} erfolgreich verarbeitet und gespeichert.")
-
-        except Exception as e:
-            # Das fängt jeden Fehler (Code-Crash, Division durch 0 etc.) auf und schreibt ihn ins Log
-            print(f"   [X] CRITICAL ERROR bei Messung {meas_id}: {e}")
-            import traceback
-            print(traceback.format_exc())  # Druckt die genaue Zeile des Fehlers für leichtes Debugging
-
-    print("\n==================================================")
-    print("BATCH-EVALUIERUNG BEENDET")
-    print(f"Log-Datei gespeichert unter: {log_filename}")
-    print("==================================================")
 
 
 if __name__ == "__main__":
