@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import json
 import plotly.graph_objects as go
-from Kinematics import SurfKinematics
+from kinematics_werror import SurfKinematics
 from uncertainties import unumpy as unp
 import datetime
 import os
