@@ -24,7 +24,7 @@ class ETDQAProcessor:
         self.csv_filename = os.path.basename(file_path)  # NEU: Dateiname merken
         self.df_csv = pd.read_csv(file_path, sep=';', decimal='.')
 
-        # --- SMART SIGN CORRECTION ---
+        # --- SMART SIGN CORRECTION ---t
         if self.terminal_version == 'legacy':
             # Korrektur für Longitudinal (H) und Rotation (R)
             self.df_csv['Pos_H'] = self.df_csv['Pos_H'] * -1

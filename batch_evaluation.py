@@ -89,7 +89,7 @@ def check_tracking_lost(json_path):
 def bin_and_average(data_frames, bin_ms=200):
     """Binned JSON-Daten in 200ms Schritte und berechnet Mittelwert/StdDev."""
     combined = pd.concat(data_frames, ignore_index=True)
-    combined['Time_Bin'] = (combined['timestamp'] // bin_ms) * bin_ms
+    combined['Time_Bin'] = (combined['Time_Sec'] // bin_ms) * bin_ms
     grouped = combined.groupby('Time_Bin')
     mean_df = grouped.mean().reset_index()
     std_df = grouped.std().reset_index().fillna(0)
@@ -116,7 +116,7 @@ def create_plot(mean_df, std_df, csv_df, title, is_translation=True):
                         alpha=0.3)
 
         # CSV Daten (mit oder ohne uncertainties package)
-        csv_time = csv_df['timestamp']
+        csv_time = [Time_Sec]
         if f'{dof}_nominal' in csv_df.columns:
             csv_nom, csv_std = csv_df[f'{dof}_nominal'], csv_df[f'{dof}_std']
         else:
@@ -224,9 +224,9 @@ def main():
                 proc.align_signals()
                 proc.apply_baseline_and_crop()
 
-                all_json_dfs.append(proc.json_df)
+                all_json_dfs.append(proc.df_json)
                 if reference_csv_df is None:
-                    reference_csv_df = proc.csv_df
+                    reference_csv_df = proc.df_csv
 
             except Exception as e:
                 print(f"   [X] FEHLER bei ID {m_id}: {e}")
