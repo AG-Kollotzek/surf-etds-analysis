@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from DataConverter import ETDQAProcessor
+import plotly.graph_objects as go
 
 # --- 1. KONFIGURATION & MESSDATEN-STRUKTUR ---
 
@@ -87,51 +88,124 @@ def check_tracking_lost(json_path):
 
 
 def bin_and_average(data_frames, bin_ms=200):
-    """Binned JSON-Daten in 200ms Schritte und berechnet Mittelwert/StdDev."""
-    combined = pd.concat(data_frames, ignore_index=True)
-    combined['Time_Bin'] = (combined['Time_Sec'] // bin_ms) * bin_ms
+    """Binned JSON-Daten und berechnet korrekten Mittelwert/StdDev über mehrere Files."""
+
+    # WICHTIG: bin_ms in Sekunden umrechnen! (200ms -> 0.2s)
+    bin_sec = bin_ms / 1000.0
+
+    aligned_frames = []
+
+    for df in data_frames:
+        # Erstelle eine Kopie, um Warnungen (SettingWithCopyWarning) zu vermeiden
+        df_align = df.copy()
+
+        # Da jedes File unterschiedlich lang vor dem ersten 5mm Peak herumdümpelt,
+        # normalisieren wir die Zeitachse JEDES Files auf 0.0 beim ersten Frame.
+        # Da DataConverter.py bereits alle Files auf "exakt 5s vor dem ersten Peak"
+        # gecroppt hat, ist t=0 jetzt für alle Files der exakt gleiche relative Zeitpunkt!
+        t_start = df_align['Time_Sec'].iloc[0]
+        df_align['Time_Relative'] = df_align['Time_Sec'] - t_start
+
+        aligned_frames.append(df_align)
+
+    # Jetzt können wir sie gefahrlos übereinander legen
+    combined = pd.concat(aligned_frames, ignore_index=True)
+
+    # Berechnung des Bins in Sekunden (z.B. 0.2)
+    # Runden ist hier sicherer als Modulo (//) bei Float-Zahlen
+    combined['Time_Bin'] = np.round(combined['Time_Relative'] / bin_sec) * bin_sec
+
+    # Gruppieren und Mitteln
     grouped = combined.groupby('Time_Bin')
     mean_df = grouped.mean().reset_index()
     std_df = grouped.std().reset_index().fillna(0)
+
     return mean_df, std_df
 
 
+import plotly.graph_objects as go
+
 def create_plot(mean_df, std_df, csv_df, title, is_translation=True):
-    """Erzeugt eine Figure für die Daten, zeigt sie aber noch nicht an."""
-    fig, ax = plt.subplots(figsize=(10, 6))
+    """Erzeugt eine interaktive Plotly-Figure."""
+    fig = go.Figure()
+
     if is_translation:
-        dofs = ['lateral', 'longitudinal', 'vertical']
-        colors = {'lateral': 'red', 'longitudinal': 'green', 'vertical': 'blue'}
+        dof_map = {'lateral': 'True_Lateral', 'longitudinal': 'True_Longitudinal', 'vertical': 'True_Vertical'}
+        # Format: (Linienfarbe, Schlauchfarbe ExacTrac, Schlauchfarbe Phantom)
+        colors = {'lateral': ('red', 'rgba(255,0,0,0.3)', 'rgba(255,0,0,0.1)'),
+                  'longitudinal': ('green', 'rgba(0,128,0,0.3)', 'rgba(0,128,0,0.1)'),
+                  'vertical': ('blue', 'rgba(0,0,255,0.3)', 'rgba(0,0,255,0.1)')}
         ylabel = 'Shift (mm)'
     else:
-        dofs = ['pitch', 'roll', 'yaw']
-        colors = {'pitch': 'red', 'roll': 'green', 'yaw': 'blue'}
+        dof_map = {'pitch': 'True_Pitch', 'roll': 'True_Roll', 'yaw': 'True_Yaw'}
+        colors = {'pitch': ('red', 'rgba(255,0,0,0.3)', 'rgba(255,0,0,0.1)'),
+                  'roll': ('green', 'rgba(0,128,0,0.3)', 'rgba(0,128,0,0.1)'),
+                  'yaw': ('blue', 'rgba(0,0,255,0.3)', 'rgba(0,0,255,0.1)')}
         ylabel = 'Rotation (°)'
 
-    for dof in dofs:
-        color = colors[dof]
-        # ExacTrac Daten
-        ax.plot(mean_df['Time_Bin'], mean_df[dof], color=color, label=f'ExacTrac {dof}')
-        ax.fill_between(mean_df['Time_Bin'], mean_df[dof] - std_df[dof], mean_df[dof] + std_df[dof], color=color,
-                        alpha=0.3)
+    # --- DER TIME-FIX ---
+    # Wir zwingen die Phantom-Daten, exakt bei 0.0s zu starten!
+    csv_time = csv_df['Time_Sec'].values - csv_df['Time_Sec'].iloc[0]
 
-        # CSV Daten (mit oder ohne uncertainties package)
-        csv_time = [Time_Sec]
-        if f'{dof}_nominal' in csv_df.columns:
-            csv_nom, csv_std = csv_df[f'{dof}_nominal'], csv_df[f'{dof}_std']
+    for etd_col, surf_col in dof_map.items():
+        line_col, fill_etd, fill_surf = colors[etd_col]
+
+        # 1. ExacTrac Daten vorbereiten (Numpy Arrays für sauberes Plotting)
+        x_etd = mean_df['Time_Bin'].values
+        y_etd = mean_df[etd_col].values
+        std_etd = std_df[etd_col].values
+
+        # ExacTrac Schlauch (Standardabweichung der Bins)
+        fig.add_trace(go.Scatter(
+            x=np.concatenate([x_etd, x_etd[::-1]]),
+            y=np.concatenate([y_etd + std_etd, (y_etd - std_etd)[::-1]]),
+            fill='toself', fillcolor=fill_etd,
+            line=dict(color='rgba(255,255,255,0)'),
+            hoverinfo='skip', showlegend=False, name=f'ETD StdDev {etd_col}'
+        ))
+
+        # ExacTrac Mean Linie
+        fig.add_trace(go.Scatter(
+            x=x_etd, y=y_etd,
+            mode='lines', line=dict(color=line_col, width=2),
+            name=f'ExacTrac {etd_col}'
+        ))
+
+        # 2. Phantom Daten (Ground Truth) vorbereiten
+        if f'{surf_col}_nominal' in csv_df.columns:
+            csv_nom = csv_df[f'{surf_col}_nominal'].values
+            csv_std = csv_df[f'{surf_col}_std'].values
         else:
-            csv_nom = np.array([getattr(v, 'n', v) for v in csv_df[dof]])
-            csv_std = np.array([getattr(v, 's', 0) for v in csv_df[dof]])
+            csv_nom = np.array([getattr(v, 'n', v) for v in csv_df[surf_col]])
+            if f'{surf_col}_std' in csv_df.columns:
+                csv_std = csv_df[f'{surf_col}_std'].values
+            else:
+                csv_std = np.array([getattr(v, 's', 0) for v in csv_df[surf_col]])
 
-        ax.plot(csv_time, csv_nom, color=color, linestyle='--', label=f'Phantom {dof}')
-        ax.fill_between(csv_time, csv_nom - csv_std, csv_nom + csv_std, color=color, alpha=0.1, linestyle='--')
+        # Phantom Schlauch (Unsicherheit)
+        fig.add_trace(go.Scatter(
+            x=np.concatenate([csv_time, csv_time[::-1]]),
+            y=np.concatenate([csv_nom + csv_std, (csv_nom - csv_std)[::-1]]),
+            fill='toself', fillcolor=fill_surf,
+            line=dict(color='rgba(255,255,255,0)'),
+            hoverinfo='skip', showlegend=False, name=f'Phantom StdDev {etd_col}'
+        ))
 
-    ax.set_title(title)
-    ax.set_xlabel('Time (ms)')
-    ax.set_ylabel(ylabel)
-    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    ax.grid(True)
-    plt.tight_layout()
+        # Phantom Linie
+        fig.add_trace(go.Scatter(
+            x=csv_time, y=csv_nom,
+            mode='lines', line=dict(color=line_col, width=2, dash='dash'),
+            name=f'Phantom {etd_col}'
+        ))
+
+    # Layout hübsch machen
+    fig.update_layout(
+        title=title,
+        xaxis_title='Time (s)',
+        yaxis_title=ylabel,
+        hovermode='x unified', # Zeigt beim Hovern alle Werte auf dieser Zeitachse an!
+        template='plotly_white'
+    )
     return fig
 
 
@@ -148,7 +222,7 @@ def main():
 
     # Eingabe parsen (z.B. ['vertikal', 'off'] oder ['all'])
     if len(eval_input) == 1:
-        target_group = eval_input[0]
+        target_group = eval_iasdfnput[0]
     elif len(eval_input) >= 2:
         target_group = eval_input[0]
         target_pads = eval_input[1].upper()  # Pad Status immer Uppercase für den Match
@@ -244,19 +318,25 @@ def main():
         fig_rot = create_plot(mean_df, std_df, reference_csv_df, f"{gruppe_name} - Rotation (Pads: {pad_status})",
                               False)
 
-        plt.show()  # Zeigt beide Fenster an und pausiert Skript
+        fig_trans.show()
+        fig_rot.show()
 
         cmd = input(
             f"\nBilder für {gruppe_name} speichern? ('save' zum Speichern, 'exit' zum Abbruch, 'Enter' zum Überspringen): ").strip().lower()
+
         if cmd == 'save':
             out_dir = results_base_dir / gruppe_name / f"Group_Pads_{pad_status}"
             out_dir.mkdir(parents=True, exist_ok=True)
-            fig_trans.savefig(out_dir / f"{gruppe_name}_Translation.png")
-            fig_rot.savefig(out_dir / f"{gruppe_name}_Rotation.png")
-            print(f"   [✓] Gespeichert in {out_dir}")
+
+            # Plotly nutzt write_image statt savefig
+            try:
+                fig_trans.write_image(out_dir / f"{gruppe_name}_Translation.png", scale=2)
+                fig_rot.write_image(out_dir / f"{gruppe_name}_Rotation.png", scale=2)
+                print(f"   [✓] Gespeichert in {out_dir}")
+            except ValueError as e:
+                print(f"   [!] Fehler beim Speichern (fehlt das 'kaleido' package?): {e}")
         elif cmd == 'exit':
             print("   [!] Verworfen. Beende Batch-Lauf.")
-            plt.close('all')
             break
         else:
             print("   [!] Übersprungen.")
