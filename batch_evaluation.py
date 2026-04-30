@@ -4,31 +4,39 @@ from DataConverter import ETDQAProcessor
 
 # Automatisch aus dem Protokoll extrahierte Zuordnung
 # Format: 'Messungs_ID': {'Gruppe': 'Gruppenname', 'ETD': 'JSON_Zeitcode', 'CSV': 'CSV_Zeitcode'}
-MEASUREMENTS = {
-    '1': {'Gruppe': 'Standardmessung', 'ETD': '160617', 'CSV': '160448'},
-    '2': {'Gruppe': 'Standardmessung', 'ETD': '161117', 'CSV': '160950'},
-    '3': {'Gruppe': 'Standardmessung', 'ETD': '161416', 'CSV': '161302'},
-    '4': {'Gruppe': 'Longitudinal', 'ETD': '161724', 'CSV': '161538'},
-    '5': {'Gruppe': 'Longitudinal', 'ETD': '162054', 'CSV': '161859'},
-    '6': {'Gruppe': 'Longitudinal', 'ETD': '162326', 'CSV': '162130'},
-    '7': {'Gruppe': 'Vertikal', 'ETD': '162647', 'CSV': '162451'},
-    '8': {'Gruppe': 'Vertikal', 'ETD': '162922', 'CSV': '162728'},
-    '9': {'Gruppe': 'Vertikal', 'ETD': '163157', 'CSV': '162951'},
-    '10': {'Gruppe': 'Rotation', 'ETD': '163508', 'CSV': '163325'},
-    '11': {'Gruppe': 'Rotation', 'ETD': '163758', 'CSV': '163613'},
-    '12': {'Gruppe': 'Rotation', 'ETD': '164007', 'CSV': '172148'},
-    '14': {'Gruppe': 'Variable_Geschwindigkeit', 'ETD': '173928', 'CSV': '173645'},
-    '15': {'Gruppe': 'Variable_Geschwindigkeit', 'ETD': '174334', 'CSV': '174056'},
-    '16': {'Gruppe': 'Variable_Geschwindigkeit', 'ETD': '174832', 'CSV': '174558'},
-    '17': {'Gruppe': 'Variable_Geschwindigkeit', 'ETD': '175259', 'CSV': '175019'},
-    '18': {'Gruppe': 'Variable_Geschwindigkeit', 'ETD': '175635', 'CSV': '175356'},
-    '19': {'Gruppe': 'Variable_Geschwindigkeit', 'ETD': '181427', 'CSV': '175824'},
-    '21': {'Gruppe': 'Vertical_Slide', 'ETD': '182337', 'CSV': '182011'},
-    '22': {'Gruppe': 'Vertical_Slide', 'ETD': '194758', 'CSV': '193557'},
-    '33': {'Gruppe': 'Variable_Geschwindigkeit_Rotation', 'ETD': '192853', 'CSV': '192615'},
-    '34': {'Gruppe': 'Vertical_Slide', 'ETD': '193528', 'CSV': '193140'},
-    '35': {'Gruppe': 'Vertical_Slide', 'ETD': '193801', 'CSV': '193557'},
-    # Fehlende hier einfach ergänzen...
+MEASUREMENT_10032026 = {
+    '1': {'Gruppe': 'Standardmessung', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '160617', 'CSV': '160448'},
+    '2': {'Gruppe': 'Standardmessung', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '161117', 'CSV': '160950'},
+    '3': {'Gruppe': 'Standardmessung', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '161416', 'CSV': '161302'},
+    '4': {'Gruppe': 'Longitudinal', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '161724', 'CSV': '161538'},
+    '5': {'Gruppe': 'Longitudinal', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '162054', 'CSV': '161859'},
+    '6': {'Gruppe': 'Longitudinal', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '162326', 'CSV': '162130'},
+    '7': {'Gruppe': 'Vertikal', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '162647', 'CSV': '162451'},
+    '8': {'Gruppe': 'Vertikal', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '162922', 'CSV': '162728'},
+    '9': {'Gruppe': 'Vertikal', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '163157', 'CSV': '162951'},
+    '10': {'Gruppe': 'Rotation', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '163508', 'CSV': '163325'},
+    '11': {'Gruppe': 'Rotation', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '163758', 'CSV': '163613'},
+    '12': {'Gruppe': 'Rotation', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '164007', 'CSV': '172148'},
+    '14': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '173928', 'CSV': '173645'},
+    '15': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '174334', 'CSV': '174056'},
+    '16': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area' : 'PhantomWithBuffer', 'Heatingpads' : 'OFF', 'ETD': '174832', 'CSV': '174558'},
+    '17': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area' : 'Fitting', 'Heatingpads' : 'OFF', 'ETD': '175259', 'CSV': '175019'},
+    '18': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area' : 'OnlyFrontSurface', 'Heatingpads' : 'OFF', 'ETD': '175635', 'CSV': '175356'},
+    '19': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area' : 'Fiting', 'Heatingpads' : 'OFF', 'ETD': '180108', 'CSV': '175824'},
+    '21': {'Gruppe': 'Vertical_Slide', 'Heatingpads': 'OFF', 'ETD': '182337', 'CSV': '182011'},
+    '22': {'Gruppe': 'Vertical_Slide', 'Heatingpads': 'OFF', 'ETD': '194758', 'CSV': '193557'},
+    '24': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '161724', 'CSV': '161538'},
+    '25': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '162054', 'CSV': '161859'},
+    '26': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '162326', 'CSV': '162130'},
+    '27': {'Gruppe': 'Vertikal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '162647', 'CSV': '162451'},
+    '28': {'Gruppe': 'Vertikal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '162922', 'CSV': '162728'},
+    '29': {'Gruppe': 'Vertikal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '163157', 'CSV': '162951'},
+    '30': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '163508', 'CSV': '163325'},
+    '31': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '163758', 'CSV': '163613'},
+    '32': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '164007', 'CSV': '172148'},
+    '33': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '173928', 'CSV': '173645'},
+    '34': {'Gruppe': 'Vertical_Slide', 'Heatingpads': '32', 'ETD': '193528', 'CSV': '193140'},
+    '35': {'Gruppe': 'Vertical_Slide', 'Heatingpads': '32', 'ETD': '193801', 'CSV': '193557'},
 }
 
 
@@ -39,11 +47,11 @@ def main():
     data_dir = Path('path/to/SURF/20260310_Messung_4/20260310_messung4')
 
     # Übergeordneter Ausgabe-Ordner
-    results_base_dir = data_dir / "03_Ergebnisse"
+    results_base_dir = 'path/to/SURF' / "Paper_Ergebnisse"
     results_base_dir.mkdir(parents=True, exist_ok=True)
 
     # Schleife durch alle im Wörterbuch definierten Messungen
-    for meas_id, data in MEASUREMENTS.items():
+    for meas_id, data in MEASUREMENT_10032026.items():
         gruppe = data['Gruppe']
         etd_code = data['ETD']
         csv_code = data['CSV']
