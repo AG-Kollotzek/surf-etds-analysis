@@ -65,7 +65,7 @@ class SurfKinematics:
         # (Z / Vertikal bleibt bei einer reinen Couch-Rotation um die Z-Achse identisch)
         x_global = x_local * cos_g - y_local * sin_g
         y_global = x_local * sin_g + y_local * cos_g
-        z_global = z_local
+        z_global = - z_local
 
         # Rotationsmatrix für die Winkel (Pitch, Roll), Vorzeichenfehler mit Test rausfinden
         # Bei +90° Couchrotation wird Pitch zu Roll und Roll zu Pitch

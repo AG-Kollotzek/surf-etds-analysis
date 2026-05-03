@@ -123,39 +123,53 @@ def bin_and_average(data_frames, bin_ms=200):
     return mean_df, std_df
 
 
-import plotly.graph_objects as go
+def calculate_rmsd(signal_exactrac, signal_brailab):
+    """
+    Berechnet die Root Mean Square Deviation zwischen zwei Signalen.
+    Ignoriert NaNs, falls das Binning kleine Lücken gelassen hat.
+    """
+    # Filtere NaNs raus, damit die Mathe nicht crasht
+    valid_idx = ~np.isnan(signal_exactrac) & ~np.isnan(signal_brailab)
+    diff = signal_exactrac[valid_idx] - signal_brailab[valid_idx]
+
+    # RMSD Formel: Wurzel aus dem Mittelwert der quadrierten Abweichungen
+    rmsd = np.sqrt(np.mean(diff ** 2))
+    return rmsd
+
 
 def create_plot(mean_df, std_df, csv_df, title, is_translation=True):
-    """Erzeugt eine interaktive Plotly-Figure."""
+    """Erzeugt eine interaktive Plotly-Figure und annotiert den RMSD."""
     fig = go.Figure()
+    rmsd_texts = []
 
     if is_translation:
         dof_map = {'lateral': 'True_Lateral', 'longitudinal': 'True_Longitudinal', 'vertical': 'True_Vertical'}
-        # Format: (Linienfarbe, Schlauchfarbe ExacTrac, Schlauchfarbe Phantom)
-        colors = {'lateral': ('red', 'rgba(255,0,0,0.3)', 'rgba(255,0,0,0.1)'),
-                  'longitudinal': ('green', 'rgba(0,128,0,0.3)', 'rgba(0,128,0,0.1)'),
-                  'vertical': ('blue', 'rgba(0,0,255,0.3)', 'rgba(0,0,255,0.1)')}
+        # Format: (Linienfarbe, Schlauchfarbe ExacTrac)
+        colors = {'lateral': ('red', 'rgba(255,0,0,0.3)'),
+                  'longitudinal': ('green', 'rgba(0,128,0,0.3)'),
+                  'vertical': ('blue', 'rgba(0,0,255,0.3)')}
         ylabel = 'Shift (mm)'
+        unit = "mm"
     else:
         dof_map = {'pitch': 'True_Pitch', 'roll': 'True_Roll', 'yaw': 'True_Yaw'}
-        colors = {'pitch': ('red', 'rgba(255,0,0,0.3)', 'rgba(255,0,0,0.1)'),
-                  'roll': ('green', 'rgba(0,128,0,0.3)', 'rgba(0,128,0,0.1)'),
-                  'yaw': ('blue', 'rgba(0,0,255,0.3)', 'rgba(0,0,255,0.1)')}
+        colors = {'pitch': ('red', 'rgba(255,0,0,0.3)'),
+                  'roll': ('green', 'rgba(0,128,0,0.3)'),
+                  'yaw': ('blue', 'rgba(0,0,255,0.3)')}
         ylabel = 'Rotation (°)'
+        unit = "°"
 
     # --- DER TIME-FIX ---
-    # Wir zwingen die Phantom-Daten, exakt bei 0.0s zu starten!
     csv_time = csv_df['Time_Sec'].values - csv_df['Time_Sec'].iloc[0]
 
     for etd_col, surf_col in dof_map.items():
-        line_col, fill_etd, fill_surf = colors[etd_col]
+        line_col, fill_etd = colors[etd_col]
 
-        # 1. ExacTrac Daten vorbereiten (Numpy Arrays für sauberes Plotting)
+        # 1. ExacTrac Daten vorbereiten
         x_etd = mean_df['Time_Bin'].values
         y_etd = mean_df[etd_col].values
         std_etd = std_df[etd_col].values
 
-        # ExacTrac Schlauch (Standardabweichung der Bins)
+        # ExacTrac Schlauch
         fig.add_trace(go.Scatter(
             x=np.concatenate([x_etd, x_etd[::-1]]),
             y=np.concatenate([y_etd + std_etd, (y_etd - std_etd)[::-1]]),
@@ -171,25 +185,11 @@ def create_plot(mean_df, std_df, csv_df, title, is_translation=True):
             name=f'ExacTrac {etd_col}'
         ))
 
-        # 2. Phantom Daten (Ground Truth) vorbereiten
+        # 2. Phantom Daten extrahieren (ohne Uncertainties-Fehler!)
         if f'{surf_col}_nominal' in csv_df.columns:
             csv_nom = csv_df[f'{surf_col}_nominal'].values
-            csv_std = csv_df[f'{surf_col}_std'].values
         else:
             csv_nom = np.array([getattr(v, 'n', v) for v in csv_df[surf_col]])
-            if f'{surf_col}_std' in csv_df.columns:
-                csv_std = csv_df[f'{surf_col}_std'].values
-            else:
-                csv_std = np.array([getattr(v, 's', 0) for v in csv_df[surf_col]])
-
-        # Phantom Schlauch (Unsicherheit)
-        fig.add_trace(go.Scatter(
-            x=np.concatenate([csv_time, csv_time[::-1]]),
-            y=np.concatenate([csv_nom + csv_std, (csv_nom - csv_std)[::-1]]),
-            fill='toself', fillcolor=fill_surf,
-            line=dict(color='rgba(255,255,255,0)'),
-            hoverinfo='skip', showlegend=False, name=f'Phantom StdDev {etd_col}'
-        ))
 
         # Phantom Linie
         fig.add_trace(go.Scatter(
@@ -198,13 +198,38 @@ def create_plot(mean_df, std_df, csv_df, title, is_translation=True):
             name=f'Phantom {etd_col}'
         ))
 
-    # Layout hübsch machen
+        # 3. Interpolieren und RMSD berechnen
+        # Da csv_time und x_etd unterschiedliche Zeitraster haben, interpolieren
+        # wir die Phantom-Daten an die Zeitstempel der ExacTrac-Bins.
+        interpolated_csv_nom = np.interp(x_etd, csv_time, csv_nom)
+
+        rmsd_val = calculate_rmsd(y_etd, interpolated_csv_nom)
+        rmsd_texts.append(f"{etd_col.capitalize()}: {rmsd_val:.3f} {unit}")
+
+    # Layout und Annotation
     fig.update_layout(
         title=title,
         xaxis_title='Time (s)',
         yaxis_title=ylabel,
-        hovermode='x unified', # Zeigt beim Hovern alle Werte auf dieser Zeitachse an!
+        hovermode='x unified',
         template='plotly_white'
+    )
+
+    annotation_text = "<b>RMSD (ExacTrac vs. Surf Phantom):</b><br>" + "<br>".join(rmsd_texts)
+
+    fig.add_annotation(
+        x=0.98, y=0.02,  # Position: Fast ganz rechts (0.98) und fast ganz unten (0.02)
+        xref="paper", yref="paper",  # Bezieht sich auf das gesamte Plot-Fenster (0 bis 1)
+        text=annotation_text,
+        showarrow=False,
+        xanchor="right",  # Der rechte Rand der Box klebt an x=0.98
+        yanchor="bottom",  # Der untere Rand der Box klebt an y=0.02
+        font=dict(size=12, color="black"),
+        align="left",  # Text innerhalb der Box bleibt linksbündig
+        bgcolor="rgba(255, 255, 255, 0.7)",  # Etwas transparenter, damit man durchschimmernde Kurven noch sieht
+        bordercolor="black",
+        borderwidth=1,
+        borderpad=4
     )
     return fig
 
@@ -222,7 +247,7 @@ def main():
 
     # Eingabe parsen (z.B. ['vertikal', 'off'] oder ['all'])
     if len(eval_input) == 1:
-        target_group = eval_iasdfnput[0]
+        target_group = eval_input[0]
     elif len(eval_input) >= 2:
         target_group = eval_input[0]
         target_pads = eval_input[1].upper()  # Pad Status immer Uppercase für den Match
@@ -341,7 +366,7 @@ def main():
         else:
             print("   [!] Übersprungen.")
 
-        plt.close('all')
+
 
 
 if __name__ == "__main__":
