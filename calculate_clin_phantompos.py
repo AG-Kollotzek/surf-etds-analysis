@@ -1,130 +1,145 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import numpy as np
-from uncertainties import unumpy as unp
 
 try:
-    from kinematics_werror import SurfKinematics
+    from kinematics import SurfKinematics
 except ImportError:
-    print("Fehler: Konnte 'Kinematics.py' nicht finden. Bitte im selben Ordner ausführen.")
+    print("Fehler: Konnte 'kinematics.py' nicht finden. Bitte im selben Ordner ausführen.")
     exit()
 
 
-class KinematicsCalculatorApp:
+class KinematicsApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("SURF Kinematics Calculator")
-        self.root.geometry("500x400")
-        self.root.resizable(False, False)
+        self.root.title("SURF QA - Quick Calculator")
+        self.root.geometry("800x600")
+        self.kin = SurfKinematics()
 
-        # Kinematik-Instanz laden
-        self.kin_model = SurfKinematics()
+        # Styling für Übersichtlichkeit
+        style = ttk.Style()
+        style.configure("Big.TLabel", font=("Segoe UI", 14, "bold"))
+        style.configure("Unit.TLabel", font=("Segoe UI", 10, "italic"), foreground="gray")
 
-        self._build_gui()
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(padx=10, pady=10, expand=True, fill="both")
 
-    def _build_gui(self):
-        # --- Eingabe-Bereich ---
-        frame_in = ttk.LabelFrame(self.root, text="Eingabewerte (Motor-Achsen)")
-        frame_in.pack(padx=10, pady=10, fill="x")
+        self.tab_fwd = ttk.Frame(self.notebook)
+        self.tab_inv = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_fwd, text="VORWÄRTS: Achsen -> Phantom")
+        self.notebook.add(self.tab_inv, text="RÜCKWÄRTS: Phantom -> Achsen")
 
-        # Labels und Eingabefelder definieren
-        ttk.Label(frame_in, text="H (mm):").grid(row=0, column=0, padx=10, pady=5, sticky="e")
-        self.entry_h = ttk.Entry(frame_in, width=15)
-        self.entry_h.grid(row=0, column=1, padx=10, pady=5)
+        self._setup_fwd_tab()
+        self._setup_inv_tab()
 
-        ttk.Label(frame_in, text="V (mm):").grid(row=1, column=0, padx=10, pady=5, sticky="e")
-        self.entry_v = ttk.Entry(frame_in, width=15)
-        self.entry_v.grid(row=1, column=1, padx=10, pady=5)
+    def _setup_fwd_tab(self):
+        container = ttk.Frame(self.tab_fwd)
+        container.pack(fill="both", expand=True, padx=20, pady=20)
 
-        ttk.Label(frame_in, text="R (°):").grid(row=2, column=0, padx=10, pady=5, sticky="e")
-        self.entry_r = ttk.Entry(frame_in, width=15)
-        self.entry_r.grid(row=2, column=1, padx=10, pady=5)
+        in_frame = ttk.LabelFrame(container, text="Motor-Parameter")
+        in_frame.pack(side="left", fill="y", padx=10)
 
-        ttk.Label(frame_in, text="Couch C (°):").grid(row=3, column=0, padx=10, pady=5, sticky="e")
-        self.entry_c = ttk.Entry(frame_in, width=15)
-        self.entry_c.grid(row=3, column=1, padx=10, pady=5)
+        self.entries_fwd = {}
+        for i, (label, key) in enumerate([("H (mm)", "h"), ("V (mm)", "v"), ("R (°)", "r"), ("Couch (°)", "c")]):
+            ttk.Label(in_frame, text=label).grid(row=i, column=0, padx=5, pady=8, sticky="w")
+            ent = ttk.Entry(in_frame, width=12)
+            ent.insert(0, "0")
+            ent.grid(row=i, column=1, padx=5, pady=8)
+            self.entries_fwd[key] = ent
 
-        # --- Berechnen Button ---
-        calc_btn = ttk.Button(self.root, text="Klinische Koordinaten berechnen", command=self.calculate)
-        calc_btn.pack(pady=5)
+        ttk.Button(in_frame, text="Position berechnen", command=self.run_fwd).grid(row=4, columnspan=2, pady=20)
 
-        # --- Ausgabe-Bereich (Tabelle) ---
-        frame_out = ttk.LabelFrame(self.root, text="Ergebnis (Klinisches Phantom-System)")
-        frame_out.pack(padx=10, pady=20, fill="both", expand=True)
+        out_frame = ttk.LabelFrame(container, text="Klinische Ist-Position")
+        out_frame.pack(side="right", fill="both", expand=True, padx=10)
 
-        columns = ("Name", "Wert", "Fehler")
-        self.tree = ttk.Treeview(frame_out, columns=columns, show="headings", height=6)
+        self.res_labels_fwd = {}
+        fields = [("Lateral (X)", 'True_Lateral', 'mm'),
+                  ("Longitudinal (Y)", 'True_Longitudinal', 'mm'),
+                  ("Vertical (Z)", 'True_Vertical', 'mm'),
+                  ("Pitch", 'True_Pitch', '°'),
+                  ("Roll", 'True_Roll', '°'),
+                  ("Yaw", 'True_Yaw', '°')]
 
-        # Spalten formatieren
-        self.tree.heading("Name", text="Achse")
-        self.tree.column("Name", width=120, anchor="w")
+        for label_text, key, unit in fields:
+            f_frame = ttk.Frame(out_frame)
+            f_frame.pack(fill="x", padx=20, pady=5)
+            ttk.Label(f_frame, text=f"{label_text}:").pack(side="left")
+            lbl = ttk.Label(f_frame, text=f"-- {unit}", style="Big.TLabel")
+            lbl.pack(side="right")
+            self.res_labels_fwd[key] = (lbl, unit)
 
-        self.tree.heading("Wert", text="Wert")
-        self.tree.column("Wert", width=100, anchor="e")
+    def _setup_inv_tab(self):
+        container = ttk.Frame(self.tab_inv)
+        container.pack(fill="both", expand=True, padx=20, pady=20)
 
-        self.tree.heading("Fehler", text="Fehler (1σ)")
-        self.tree.column("Fehler", width=120, anchor="e")
+        in_frame = ttk.LabelFrame(container, text="Zielvorgaben (Felder leer lassen = egal)")
+        in_frame.pack(side="left", fill="y", padx=10)
 
-        self.tree.pack(fill="both", expand=True, padx=5, pady=5)
+        self.entries_inv = {}
+        fields = [("Lat (X)", "x"), ("Long (Y)", "y"), ("Vert (Z)", "z"), ("Pitch (°)", "pitch"),
+                  ("Couch (°)", "couch")]
+        for i, (label, key) in enumerate(fields):
+            ttk.Label(in_frame, text=label).grid(row=i, column=0, padx=5, pady=8, sticky="w")
+            ent = ttk.Entry(in_frame, width=12)
+            ent.grid(row=i, column=1, padx=5, pady=8)
+            self.entries_inv[key] = ent
 
-    def calculate(self):
-        # 1. Eingaben auslesen (leere Felder als 0.0 interpretieren)
-        def parse_input(entry_widget):
-            val = entry_widget.get().strip()
-            if not val:
-                return 0.0
-            return float(val.replace(',', '.'))
+        ttk.Button(in_frame, text="Optimale Achsen finden", command=self.run_inv).grid(row=5, columnspan=2, pady=20)
 
+        out_frame = ttk.LabelFrame(container, text="Benötigte Motorstellung")
+        out_frame.pack(side="right", fill="both", expand=True, padx=10)
+
+        self.res_h = ttk.Label(out_frame, text="H: -- mm", style="Big.TLabel")
+        self.res_h.pack(pady=20)
+        self.res_v = ttk.Label(out_frame, text="V: -- mm", style="Big.TLabel")
+        self.res_v.pack(pady=20)
+        ttk.Label(out_frame, text="(Strategie: Minimale Auslenkung)", style="Unit.TLabel").pack(side="bottom", pady=10)
+
+    def run_fwd(self):
         try:
-            h_val = parse_input(self.entry_h)
-            v_val = parse_input(self.entry_v)
-            r_val = parse_input(self.entry_r)
-            c_val = parse_input(self.entry_c)
+            h = float(self.entries_fwd['h'].get().replace(',', '.'))
+            v = float(self.entries_fwd['v'].get().replace(',', '.'))
+            r = float(self.entries_fwd['r'].get().replace(',', '.'))
+            c = float(self.entries_fwd['c'].get().replace(',', '.'))
+
+            res = self.kin.calculate_task_space(h, v, r, c)
+
+            for key, (lbl, unit) in self.res_labels_fwd.items():
+                val = res[key]
+                lbl.config(text=f"{val:8.3f} {unit}", foreground="#2c3e50")
         except ValueError:
-            messagebox.showerror("Eingabefehler", "Bitte nur gültige Zahlen eingeben (z.B. 12.5).")
-            return
-
-        # 2. Berechnung durchführen
-        try:
-            # Kinematics erwartet Arrays (aufgrund von unp.uarray), wir übergeben Arrays der Länge 1
-            res = self.kin_model.calculate_task_space(
-                np.array([h_val]),
-                np.array([v_val]),
-                np.array([r_val]),
-                couch_angle_raw_deg=c_val
-            )
+            messagebox.showerror("Fehler", "Bitte gültige Zahlen eingeben.")
         except Exception as e:
-            messagebox.showerror("Berechnungsfehler", f"Fehler in Kinematics.py:\n{str(e)}")
-            return
+            messagebox.showerror("Fehler", str(e))
 
-        # 3. Tabelle leeren
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+    def run_inv(self):
+        try:
+            targets = {}
+            for k in ['x', 'y', 'z', 'pitch']:
+                v = self.entries_inv[k].get().strip().replace(',', '.')
+                targets[k] = float(v) if v else None
 
-        # 4. Ergebnisse mappen und eintragen
-        display_mapping = [
-            ('True_Lateral', 'Lateral (X)', 'mm'),
-            ('True_Longitudinal', 'Longitudinal (Y)', 'mm'),
-            ('True_Vertical', 'Vertical (Z)', 'mm'),
-            ('True_Pitch', 'Pitch', '°'),
-            ('True_Roll', 'Roll', '°'),
-            ('True_Yaw', 'Yaw', '°')
-        ]
+            c_val = self.entries_inv['couch'].get().strip().replace(',', '.')
+            couch = float(c_val) if c_val else 0.0
 
-        for key, name, unit in display_mapping:
-            # res[key] ist ein Array mit einem Element vom Typ uncertainties.ufloat
-            ufloat_val = res[key][0]
-            nominal = ufloat_val.n
-            std_dev = ufloat_val.s
+            # Warnung: Couch 0 und X-Verschiebung
+            if abs(couch) < 0.1 and targets.get('x') and abs(targets['x']) > 0.5:
+                messagebox.showwarning("Geometrie-Warnung",
+                                       "Bei Couch 0° kann das Phantom physikalisch nicht seitlich (X) verschoben werden!")
+                return
 
-            # Werte auf 3 Nachkommastellen runden
-            wert_str = f"{nominal:.3f} {unit}"
-            fehler_str = f"± {std_dev:.3f} {unit}"
+            res = self.kin.find_optimal_axes(targets, couch)
 
-            self.tree.insert("", "end", values=(name, wert_str, fehler_str))
+            self.res_h.config(text=f"H: {res['H']:.3f} mm", foreground="#2980b9")
+            self.res_v.config(text=f"V: {res['V']:.3f} mm", foreground="#2980b9")
+
+        except ValueError as ve:
+            messagebox.showwarning("Nicht möglich", str(ve))
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Ungültige Eingabe: {e}")
 
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = KinematicsCalculatorApp(root)
+    KinematicsApp(root)
     root.mainloop()

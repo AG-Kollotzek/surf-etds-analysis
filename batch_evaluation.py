@@ -35,7 +35,7 @@ MEASUREMENT_10032026 = {
     '11': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '163758',
            'CSV': '163613'},
     '12': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '164007',
-           'CSV': '172148'},
+           'CSV': '163820'},
     '14': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '173928',
            'CSV': '173645'},
     '15': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '174334',
@@ -137,7 +137,7 @@ def calculate_rmsd(signal_exactrac, signal_brailab):
     return rmsd
 
 
-def create_plot(mean_df, std_df, csv_df, title, is_translation=True):
+def create_plot(mean_df, std_df, csv_df, title, is_translation=True, lost_times=None):
     """Erzeugt eine interaktive Plotly-Figure und annotiert den RMSD."""
     fig = go.Figure()
     rmsd_texts = []
@@ -205,6 +205,34 @@ def create_plot(mean_df, std_df, csv_df, title, is_translation=True):
 
         rmsd_val = calculate_rmsd(y_etd, interpolated_csv_nom)
         rmsd_texts.append(f"{etd_col.capitalize()}: {rmsd_val:.3f} {unit}")
+
+    # Zeichne die Tracking Lost Bereiche ein
+    if lost_times:
+        lost_times = sorted(list(set(lost_times)))
+        intervals = []
+
+        if lost_times:
+            start_t = lost_times[0]
+            prev_t = lost_times[0]
+            # Verbinde nah beieinander liegende Lost-Frames (z.B. < 0.5s) zu einem Block
+            for t in lost_times[1:]:
+                if t - prev_t > 0.5:
+                    intervals.append((start_t, prev_t))
+                    start_t = t
+                prev_t = t
+            intervals.append((start_t, prev_t))
+
+            # Füge für jedes identifizierte Intervall ein Rechteck in den Plot ein
+            for (t0, t1) in intervals:
+                # Mindestbreite für das Auge sichern, falls es nur ein einzelner Frame war
+                t1 = max(t1, t0 + 0.1)
+                fig.add_vrect(
+                    x0=t0, x1=t1,
+                    fillcolor="gray", opacity=0.3,
+                    layer="below", line_width=0,
+                    annotation_text="Tracking Lost", annotation_position="top left",
+                    annotation_font_color="gray"
+                )
 
     # Layout und Annotation
     fig.update_layout(
@@ -286,6 +314,7 @@ def main():
     for (gruppe_name, pad_status), ids in groups.items():
         print(f"\n[{gruppe_name.upper()} | Pads: {pad_status}] ---> Verarbeite IDs: {ids}")
         all_json_dfs = []
+        all_lost_times = []
         reference_csv_df = None
         group_failed = False
 
@@ -304,16 +333,11 @@ def main():
             if not csv_files or not json_files:
                 print(f"   [!] FEHLT: Daten für ID {m_id}. Gruppe wird übersprungen.")
                 group_failed = True
-                break
+                continue
 
             # Nimm jeweils den ersten Treffer (rglob ignoriert die Unterordner-Struktur davor)
             csv_path = str(csv_files[0])
             json_path = str(json_files[0])
-
-            if check_tracking_lost(json_path):
-                print(f"   [!] ABBRUCH: Tracking Lost in ID {m_id} gefunden!")
-                group_failed = True
-                break
 
             try:
                 proc = ETDQAProcessor(terminal_version='legacy')
@@ -324,24 +348,28 @@ def main():
                 proc.apply_baseline_and_crop()
 
                 all_json_dfs.append(proc.df_json)
+
+                if hasattr(proc, 'lost_times_aligned'):
+                    all_lost_times.extend(proc.lost_times_aligned)
+
                 if reference_csv_df is None:
                     reference_csv_df = proc.df_csv
 
             except Exception as e:
                 print(f"   [X] FEHLER bei ID {m_id}: {e}")
                 group_failed = True
-                break
+                continue
 
-        if group_failed or not all_json_dfs:
-            print(f"   ---> Gruppe {gruppe_name} abgebrochen.")
+        if not all_json_dfs:
+            print(f"   ---> Gruppe {gruppe_name} abgebrochen (Keine validen Daten).")
             continue
 
         # Mittelung und interaktives Plotting
         mean_df, std_df = bin_and_average(all_json_dfs)
         fig_trans = create_plot(mean_df, std_df, reference_csv_df, f"{gruppe_name} - Translation (Pads: {pad_status})",
-                                True)
+                                True, all_lost_times)
         fig_rot = create_plot(mean_df, std_df, reference_csv_df, f"{gruppe_name} - Rotation (Pads: {pad_status})",
-                              False)
+                              False, all_lost_times)
 
         fig_trans.show()
         fig_rot.show()

@@ -41,14 +41,19 @@ class ETDQAProcessor:
             data = json.load(f)
 
         results = []
+        self.raw_lost_timestamps = []
         for entry in data['trackingResults']:
-            if not entry.get('trackingLost', False):
+            if entry.get('trackingLost', False):
+                self.raw_lost_timestamps.append(entry['timestamp'])  # NEU
+            else:
                 shifts = {k: float(v) for k, v in entry['shiftValues'].items()}
                 shifts['timestamp_ms'] = entry['timestamp']
                 results.append(shifts)
 
         self.df_json = pd.DataFrame(results)
+        t0 = self.df_json['timestamp_ms'].iloc[0]
         self.df_json['Time_Sec'] = (self.df_json['timestamp_ms'] - self.df_json['timestamp_ms'].iloc[0]) / 1000.0
+        self.lost_times_sec = [(t - t0) / 1000.0 for t in self.raw_lost_timestamps]
 
         # Internes Alignment nutzt Magnitude (unabhängig vom Vorzeichen)
         lat0, long0, vert0 = self.df_json['lateral'].iloc[0], self.df_json['longitudinal'].iloc[0], \
@@ -114,6 +119,12 @@ class ETDQAProcessor:
         self.df_json['Time_Sec'] = (self.df_json['Time_Sec'] - json_first) * scale_factor + csv_first
         self.time_offset = 0
 
+        # NEU: Tracking-Lost Zeiten an das CSV-Alignment anpassen
+        if hasattr(self, 'lost_times_sec') and self.lost_times_sec:
+            self.lost_times_aligned = [(t - json_first) * scale_factor + csv_first for t in self.lost_times_sec]
+        else:
+            self.lost_times_aligned = []
+
         # WICHTIG: Start und Ende für die Baseline-Korrektur speichern
         self.sync_t_start = csv_start
         self.sync_t_end = csv_end
@@ -153,6 +164,9 @@ class ETDQAProcessor:
         crop_time = t_start - 5.0
         self.df_csv = self.df_csv[self.df_csv['Time_Sec'] >= crop_time].reset_index(drop=True)
         self.df_json = self.df_json[self.df_json['Time_Sec'] >= crop_time].reset_index(drop=True)
+
+        if hasattr(self, 'lost_times_aligned'):
+            self.lost_times_aligned = [t for t in self.lost_times_aligned if t >= crop_time]
 
         print(f"-> Daten gecroppt. Plot startet nun exakt 5s vor dem ersten Peak.")
 
