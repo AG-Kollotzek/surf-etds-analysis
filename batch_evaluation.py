@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from DataConverter import ETDQAProcessor
 import plotly.graph_objects as go
+import tkinter as tk
+from tkinter import filedialog
 
 # --- 1. KONFIGURATION & MESSDATEN-STRUKTUR ---
 
@@ -49,7 +51,7 @@ MEASUREMENT_10032026 = {
     '19': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area': 'Fiting', 'Heatingpads': 'OFF', 'ETD': '180108',
            'CSV': '175824'},
     '21': {'Gruppe': 'Vertical_Slide', 'Heatingpads': 'OFF', 'ETD': '182337', 'CSV': '182011'},
-    '22': {'Gruppe': 'Vertical_Slide', 'Heatingpads': 'OFF', 'ETD': '194758', 'CSV': '193557'},
+    '22': {'Gruppe': 'Vertical_Slide', 'Heatingpads': 'OFF', 'ETD': '182630', 'CSV': '182433'},
     '24': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190312',
            'CSV': '190114'},
     '25': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190609',
@@ -229,9 +231,7 @@ def create_plot(mean_df, std_df, csv_df, title, is_translation=True, lost_times=
                 fig.add_vrect(
                     x0=t0, x1=t1,
                     fillcolor="gray", opacity=0.3,
-                    layer="below", line_width=0,
-                    annotation_text="Tracking Lost", annotation_position="top left",
-                    annotation_font_color="gray"
+                    layer="below", line_width=0
                 )
 
     # Layout und Annotation
@@ -266,105 +266,166 @@ def create_plot(mean_df, std_df, csv_df, title, is_translation=True, lost_times=
 
 def main():
     print("=== KONFIGURATION BATCH-EVALUIERUNG ===")
-    print("Beispiele für Eingaben: 'all', 'all off', 'vertikal off', 'longitudinal 32'")
+    print("Beispiele: 'all', 'all off', 'vertikal off', 'longitudinal 32 crop', 'other'")
     eval_input = input("Welchen Auswertungsmodus wählen?: ").strip().lower().split()
 
-    # Defaults
-    target_group = "all"
-    target_pads = "all"
+    if not eval_input:
+        return
 
-    # Eingabe parsen (z.B. ['vertikal', 'off'] oder ['all'])
-    if len(eval_input) == 1:
-        target_group = eval_input[0]
-    elif len(eval_input) >= 2:
-        target_group = eval_input[0]
-        target_pads = eval_input[1].upper()  # Pad Status immer Uppercase für den Match
+    # --- FEAT 1: Prüfen, ob "crop" gewünscht ist ---
+    use_crop = False
+    if "crop" in eval_input:
+        use_crop = True
+        eval_input.remove("crop")
 
-    # Basis-Verzeichnisse anpassen!
+    # --- FEAT 2: Custom Modus ("other") ---
+    if eval_input[0] == "other":
+        print("\n=== CUSTOM DATEIAUSWAHL (OTHER MODUS) ===")
+        # Tkinter initialisieren, Fenster verstecken und on-top zwingen
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+
+        print("-> Wähle die .csv Datei...")
+        csv_path = filedialog.askopenfilename(title="SURF CSV auswählen", filetypes=[("CSV Files", "*.csv")])
+        if not csv_path:
+            print("Abbruch.")
+            return
+
+        print("-> Wähle die .json Datei...")
+        json_path = filedialog.askopenfilename(title="ETD JSON auswählen", filetypes=[("JSON Files", "*.json")])
+        if not json_path:
+            print("Abbruch.")
+            return
+
+        root.destroy()  # Tkinter beenden
+
+        print(f"\nLade:\n CSV: {Path(csv_path).name}\n JSON: {Path(json_path).name}")
+
+        csv_sync_window = None
+        if use_crop:
+            crop_input = input("-> Crop-Fenster für CSV Sync (z.B. '10-50' in Sek, Leer=Überspringen): ").strip()
+            if crop_input:
+                try:
+                    parts = crop_input.replace(',', '.').split('-')
+                    t_min = float(parts[0])
+                    t_max = float(parts[1]) if len(parts) > 1 else 99999.0
+                    csv_sync_window = (t_min, t_max)
+                except ValueError:
+                    print("   [!] Ungültige Eingabe, verwende normales Alignment.")
+
+        try:
+            proc = ETDQAProcessor(terminal_version='legacy')
+            proc.load_csv(csv_path)
+            proc.load_json(json_path)
+            proc.apply_kinematics(couch_angle=0.0)
+            proc.align_signals(csv_sync_window=csv_sync_window)
+            proc.apply_baseline_and_crop()
+
+            # Auch ein einzelnes File kann an bin_and_average übergeben werden!
+            mean_df, std_df = bin_and_average([proc.df_json])
+
+            # NEU: Zeitachse der grauen Boxen an den 0.0-Startpunkt anpassen!
+            t_start_json = proc.df_json['Time_Sec'].iloc[0]
+            lost = [t - t_start_json for t in getattr(proc, 'lost_times_aligned', [])]
+
+            fig_trans = create_plot(mean_df, std_df, proc.df_csv, f"Custom - Translation", True, lost)
+
+            fig_rot = create_plot(mean_df, std_df, proc.df_csv, f"Custom - Rotation", False, lost)
+
+            fig_trans.show()
+            fig_rot.show()
+        except Exception as e:
+            print(f"Fehler bei der Custom-Auswertung: {e}")
+            import traceback
+            traceback.print_exc()
+
+        return  # Bei "other" brechen wir hiernach ab, keine Batch-Schleife.
+
+    # --- STANDARD BATCH MODUS ---
+    target_group = eval_input[0]
+    target_pads = eval_input[1].upper() if len(eval_input) >= 2 else "ALL"
+
     data_dir = Path('path/to/SURF/20260310_Messung_4/20260310_messung4')
     results_base_dir = Path('path/to/SURF/Paper_Ergebnisse')
     results_base_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\nStarte Verarbeitung für Gruppe: '{target_group.upper()}', Heatingpads: '{target_pads}'")
 
-    # Messungen filtern und gruppieren
     groups = {}
     for m_id, meta in MEASUREMENT_10032026.items():
         gruppe_lower = meta['Gruppe'].lower()
         pad_status = meta['Heatingpads']
-
-        # Prüfe Gruppen-Filter
-        if target_group != "all" and gruppe_lower != target_group:
-            continue
-
-        # Prüfe Pad-Filter
-        if target_pads != "ALL" and pad_status != target_pads:
-            continue
-
+        if target_group != "all" and gruppe_lower != target_group: continue
+        if target_pads != "ALL" and pad_status != target_pads: continue
         key = (meta['Gruppe'], pad_status)
-        if key not in groups:
-            groups[key] = []
+        if key not in groups: groups[key] = []
         groups[key].append(m_id)
 
     if not groups:
         print("Keine Messungen gefunden, die auf diesen Filter zutreffen!")
         return
 
-    # Gefilterte Gruppen abarbeiten
     for (gruppe_name, pad_status), ids in groups.items():
         print(f"\n[{gruppe_name.upper()} | Pads: {pad_status}] ---> Verarbeite IDs: {ids}")
         all_json_dfs = []
         all_lost_times = []
         reference_csv_df = None
-        group_failed = False
 
         for m_id in ids:
             meta = MEASUREMENT_10032026[m_id]
-            etd_code = meta['ETD']  # z.B. "160617"
-            csv_code = meta['CSV']  # z.B. "160448"
+            etd_code, csv_code = meta['ETD'], meta['CSV']
 
-            # 1. CSV-Suche: Orientiert sich nur an den letzten 6 Ziffern vor .csv
             csv_files = list(data_dir.rglob(f"*{csv_code}.csv"))
-
-            # 2. JSON-Suche: Wandelt "160617" in "16-06-17" um, damit es zum Dateinamen passt
             formatted_etd = f"{etd_code[:2]}-{etd_code[2:4]}-{etd_code[4:]}"
             json_files = list(data_dir.rglob(f"*{formatted_etd}.json"))
 
             if not csv_files or not json_files:
-                print(f"   [!] FEHLT: Daten für ID {m_id}. Gruppe wird übersprungen.")
-                group_failed = True
+                print(f"   [!] FEHLT: Daten für ID {m_id}. Überspringe.")
                 continue
 
-            # Nimm jeweils den ersten Treffer (rglob ignoriert die Unterordner-Struktur davor)
             csv_path = str(csv_files[0])
             json_path = str(json_files[0])
+
+            # NEU: CROP ABFRAGE PRO ID IM BATCH
+            csv_sync_window = None
+            if use_crop:
+                crop_input = input(
+                    f"   -> Crop-Fenster für ID {m_id} (z.B. '10' oder '10-50', Leer=Überspringen): ").strip()
+                if crop_input:
+                    try:
+                        parts = crop_input.replace(',', '.').split('-')
+                        t_min = float(parts[0])
+                        t_max = float(parts[1]) if len(parts) > 1 else 99999.0
+                        csv_sync_window = (t_min, t_max)
+                    except ValueError:
+                        print("      [!] Ungültige Eingabe, verwende normales Alignment.")
 
             try:
                 proc = ETDQAProcessor(terminal_version='legacy')
                 proc.load_csv(csv_path)
                 proc.load_json(json_path)
                 proc.apply_kinematics(couch_angle=0.0)
-                proc.align_signals()
+                proc.align_signals(csv_sync_window=csv_sync_window)
                 proc.apply_baseline_and_crop()
 
                 all_json_dfs.append(proc.df_json)
-
                 if hasattr(proc, 'lost_times_aligned'):
-                    all_lost_times.extend(proc.lost_times_aligned)
-
+                    # NEU: Auch hier müssen die Boxen auf 0.0 genullt werden!
+                    t_start_json = proc.df_json['Time_Sec'].iloc[0]
+                    shifted_lost = [t - t_start_json for t in proc.lost_times_aligned]
+                    all_lost_times.extend(shifted_lost)
                 if reference_csv_df is None:
                     reference_csv_df = proc.df_csv
 
             except Exception as e:
                 print(f"   [X] FEHLER bei ID {m_id}: {e}")
-                group_failed = True
                 continue
 
         if not all_json_dfs:
             print(f"   ---> Gruppe {gruppe_name} abgebrochen (Keine validen Daten).")
             continue
 
-        # Mittelung und interaktives Plotting
         mean_df, std_df = bin_and_average(all_json_dfs)
         fig_trans = create_plot(mean_df, std_df, reference_csv_df, f"{gruppe_name} - Translation (Pads: {pad_status})",
                                 True, all_lost_times)
@@ -376,12 +437,9 @@ def main():
 
         cmd = input(
             f"\nBilder für {gruppe_name} speichern? ('save' zum Speichern, 'exit' zum Abbruch, 'Enter' zum Überspringen): ").strip().lower()
-
         if cmd == 'save':
             out_dir = results_base_dir / gruppe_name / f"Group_Pads_{pad_status}"
             out_dir.mkdir(parents=True, exist_ok=True)
-
-            # Plotly nutzt write_image statt savefig
             try:
                 fig_trans.write_image(out_dir / f"{gruppe_name}_Translation.png", scale=2)
                 fig_rot.write_image(out_dir / f"{gruppe_name}_Rotation.png", scale=2)

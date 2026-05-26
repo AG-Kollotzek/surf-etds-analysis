@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import json
 import plotly.graph_objects as go
-from kinematics_werror import SurfKinematics
+from kinematics import SurfKinematics
 from uncertainties import unumpy as unp
 import datetime
 import os
@@ -81,11 +81,20 @@ class ETDQAProcessor:
             self.df_csv[f"{key}_upper"] = self.df_csv[key] + self.df_csv[f"{key}_std"]
             self.df_csv[f"{key}_lower"] = self.df_csv[key] - self.df_csv[f"{key}_std"]
 
-    def align_signals(self, sync_axis='Pos_H', threshold=4.5):
-        """Synchronisiert und speichert die exakten Zeiten der Peaks für das spätere Cropping."""
+    def align_signals(self, sync_axis='Pos_H', threshold=4.5, csv_sync_window=None):
+        """Synchronisiert und speichert die exakten Zeiten der Peaks für das spätere Cropping.
+           csv_sync_window: (t_min, t_max) in Sekunden, um falsche Peaks in der CSV zu ignorieren."""
 
-        def get_peak_info(times, values, thresh):
-            v_smooth = pd.Series(values).rolling(window=5, center=True).median().fillna(0).values
+        def get_peak_info(times, values, thresh, window=None):
+            values_check = values.copy()
+
+            # NEU: Filtere falsche Peaks durch virtuelles Nullen aus
+            if window is not None:
+                t_min, t_max = window
+                mask_out = (times < t_min) | (times > t_max)
+                values_check.loc[mask_out] = 0.0
+
+            v_smooth = pd.Series(values_check).rolling(window=5, center=True).median().fillna(0).values
             mask = np.abs(v_smooth) > thresh
 
             # Finde Kanten
@@ -107,10 +116,11 @@ class ETDQAProcessor:
 
             return t_first_mid, t_last_mid, t_first_start, t_last_end
 
-        # Peak-Zeiten ermitteln
+        # Peak-Zeiten ermitteln (CSV übergibt jetzt das window!)
         csv_first, csv_last, csv_start, csv_end = get_peak_info(self.df_csv['Time_Sec'], self.df_csv[sync_axis],
-                                                                threshold)
-        json_first, json_last, _, _ = get_peak_info(self.df_json['Time_Sec'], self.df_json['Vector_Mag'], threshold)
+                                                                threshold, window=csv_sync_window)
+        json_first, json_last, _, _ = get_peak_info(self.df_json['Time_Sec'], self.df_json['Vector_Mag'], threshold,
+                                                    window=None)
 
         if csv_first is None or json_first is None:
             raise ValueError("Nicht genügend 5mm Peaks für Sync gefunden.")
@@ -119,7 +129,7 @@ class ETDQAProcessor:
         self.df_json['Time_Sec'] = (self.df_json['Time_Sec'] - json_first) * scale_factor + csv_first
         self.time_offset = 0
 
-        # NEU: Tracking-Lost Zeiten an das CSV-Alignment anpassen
+        # Tracking-Lost Zeiten an das CSV-Alignment anpassen
         if hasattr(self, 'lost_times_sec') and self.lost_times_sec:
             self.lost_times_aligned = [(t - json_first) * scale_factor + csv_first for t in self.lost_times_sec]
         else:
