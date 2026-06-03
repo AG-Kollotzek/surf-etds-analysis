@@ -480,7 +480,7 @@ def plot_evaluation_results_interactive(
         axes[0].plot(t_kin, trans_et['Y'], label='ET Y (long.)', color=C_Y_YAW, linestyle='-', linewidth=line_w)
         axes[0].plot(t_kin, trans_et['Z'], label='ET Z (vert.)', color=C_Z_ROLL, linestyle='-', linewidth=line_w)
         axes[0].set_ylabel('Translation [mm]')
-        axes[0].legend(loc='upper right', ncol=2, fontsize=9)
+        axes[0].legend(loc='upper right', ncol=1, fontsize=9)
         axes[0].grid(True, linestyle=':', alpha=0.6)
 
         # --- AXES 1: Rotation ---
@@ -493,7 +493,7 @@ def plot_evaluation_results_interactive(
         axes[1].plot(t_kin, rot_et['yaw'], label='ET yaw', color=C_Y_YAW, linestyle='-', linewidth=line_w)
         axes[1].plot(t_kin, rot_et['roll'], label='ET roll', color=C_Z_ROLL, linestyle='-', linewidth=line_w)
         axes[1].set_ylabel('Rotation [°]')
-        axes[1].legend(loc='upper right', ncol=2, fontsize=9)
+        axes[1].legend(loc='upper right', ncol=1, fontsize=9)
         axes[1].grid(True, linestyle=':', alpha=0.6)
 
         # --- AXES 2: RMSE ---
