@@ -9,6 +9,9 @@ from DataConverter import ETDQAProcessor
 import plotly.graph_objects as go
 import tkinter as tk
 from tkinter import filedialog
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # --- 1. KONFIGURATION & MESSDATEN-STRUKTUR ---
 
@@ -88,6 +91,148 @@ def check_tracking_lost(json_path):
             return True
     return False
 
+
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+
+def plot_evaluation_results(
+        t_kin, trans_et, trans_ihd, rot_et, rot_ihd,
+        t_rmse, rmse3d, rmse_temp,
+        plot_engine='matplotlib',
+        save_path=None
+):
+    """
+    Generates a synchronized 3-fold plot for evaluating one measurement group.
+
+    Parameters:
+    - t_kin: The synchronized (stretched/cut) time axis array for kinematics.
+    - trans_et, trans_ihd: Dictionaries or DataFrames with keys 'X', 'Y', 'Z'
+    - rot_et, rot_ihd: Dictionaries or DataFrames with keys 'pitch', 'yaw', 'roll'
+    - t_rmse: The synchronized time axis array for the RMSE data. Must have identical limits to t_kin.
+    - rmse3d, rmse_temp: Arrays containing the RMSE calculations.
+    - plot_engine: 'matplotlib' (for publication) or 'plotly' (for exploration).
+    """
+
+    if plot_engine == 'matplotlib':
+        # --- Formal Publication Styling ---
+        plt.rcParams.update({
+            'font.family': 'sans-serif',
+            'font.sans-serif': ['Arial', 'Helvetica', 'DejaVu Sans'],
+            'font.size': 12,
+            'axes.edgecolor': 'black',
+            'axes.linewidth': 1.2,
+            'xtick.color': 'black',
+            'ytick.color': 'black',
+            'legend.frameon': True,
+            'legend.edgecolor': 'black',
+            'legend.fancybox': False,
+            'legend.framealpha': 1.0,
+            'legend.fontsize': 10
+        })
+
+        # sharex=True perfectly unifies the time axis across all three panels
+        fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True, dpi=300)
+        line_w = 1.0  # Thinner lines to make dashed segments easily distinguishable
+
+        # Consistent coloring across translational and rotational pairs
+        colors = {'X_pitch': '#d62728', 'Y_yaw': '#1f77b4', 'Z_roll': '#2ca02c'}
+
+        # --- Top Plot: Translations ---
+        axes[0].plot(t_kin, trans_et['X'], label='ET X (lat)', color=colors['X_pitch'], linestyle='-', linewidth=line_w)
+        axes[0].plot(t_kin, trans_ihd['X'], label='IHD X', color=colors['X_pitch'], linestyle='--', linewidth=line_w)
+
+        axes[0].plot(t_kin, trans_et['Y'], label='ET Y (long)', color=colors['Y_yaw'], linestyle='-', linewidth=line_w)
+        axes[0].plot(t_kin, trans_ihd['Y'], label='IHD Y', color=colors['Y_yaw'], linestyle='--', linewidth=line_w)
+
+        axes[0].plot(t_kin, trans_et['Z'], label='ET Z (vert)', color=colors['Z_roll'], linestyle='-', linewidth=line_w)
+        axes[0].plot(t_kin, trans_ihd['Z'], label='IHD Z', color=colors['Z_roll'], linestyle='--', linewidth=line_w)
+
+        axes[0].set_ylabel('Translation [mm]', color='black')
+        axes[0].legend(loc='upper right')
+        axes[0].grid(True, linestyle=':', alpha=0.6)
+
+        # --- Middle Plot: Rotations ---
+        axes[1].plot(t_kin, rot_et['pitch'], label='ET pitch', color=colors['X_pitch'], linestyle='-', linewidth=line_w)
+        axes[1].plot(t_kin, rot_ihd['pitch'], label='IHD pitch', color=colors['X_pitch'], linestyle='--',
+                     linewidth=line_w)
+
+        axes[1].plot(t_kin, rot_et['yaw'], label='ET yaw', color=colors['Y_yaw'], linestyle='-', linewidth=line_w)
+        axes[1].plot(t_kin, rot_ihd['yaw'], label='IHD yaw', color=colors['Y_yaw'], linestyle='--', linewidth=line_w)
+
+        axes[1].plot(t_kin, rot_et['roll'], label='ET roll', color=colors['Z_roll'], linestyle='-', linewidth=line_w)
+        axes[1].plot(t_kin, rot_ihd['roll'], label='IHD roll', color=colors['Z_roll'], linestyle='--', linewidth=line_w)
+
+        axes[1].set_ylabel('Rotation [°]', color='black')
+        axes[1].legend(loc='upper right')
+        axes[1].grid(True, linestyle=':', alpha=0.6)
+
+        # --- Bottom Plot: RMSE ---
+        axes[2].plot(t_rmse, rmse3d, label='RMSE3D', color='#9467bd', linestyle='-', linewidth=line_w)
+        axes[2].plot(t_rmse, rmse_temp, label='RMSE_temp', color='#8c564b', linestyle='-', linewidth=line_w)
+
+        axes[2].set_ylabel('RMSE', color='black')
+        axes[2].set_xlabel('Time [s]', color='black')
+        axes[2].legend(loc='upper right')
+        axes[2].grid(True, linestyle=':', alpha=0.6)
+
+        plt.tight_layout()
+        if save_path:
+            plt.savefig(save_path, dpi=600, bbox_inches='tight')  # High res output
+        plt.show()
+
+    elif plot_engine == 'plotly':
+        # --- Interactive Exploration Styling ---
+        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05)
+        colors = {'X_pitch': 'red', 'Y_yaw': 'blue', 'Z_roll': 'green'}
+        line_w = 1.5
+
+        # 1. Translation
+        fig.add_trace(go.Scatter(x=t_kin, y=trans_et['X'], name='ET X (lat.)', mode='lines',
+                                 line=dict(color=colors['X_pitch'], dash='solid', width=line_w)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=t_kin, y=trans_ihd['X'], name='IHD X', mode='lines',
+                                 line=dict(color=colors['X_pitch'], dash='dash', width=line_w)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=t_kin, y=trans_et['Y'], name='ET Y (long.)', mode='lines',
+                                 line=dict(color=colors['Y_yaw'], dash='solid', width=line_w)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=t_kin, y=trans_ihd['Y'], name='IHD Y', mode='lines',
+                                 line=dict(color=colors['Y_yaw'], dash='dash', width=line_w)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=t_kin, y=trans_et['Z'], name='ET Z (vert.)', mode='lines',
+                                 line=dict(color=colors['Z_roll'], dash='solid', width=line_w)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=t_kin, y=trans_ihd['Z'], name='IHD Z', mode='lines',
+                                 line=dict(color=colors['Z_roll'], dash='dash', width=line_w)), row=1, col=1)
+
+        # 2. Rotation
+        fig.add_trace(go.Scatter(x=t_kin, y=rot_et['pitch'], name='ET pitch', mode='lines',
+                                 line=dict(color=colors['X_pitch'], dash='solid', width=line_w)), row=2, col=1)
+        fig.add_trace(go.Scatter(x=t_kin, y=rot_ihd['pitch'], name='IHD pitch', mode='lines',
+                                 line=dict(color=colors['X_pitch'], dash='dash', width=line_w)), row=2, col=1)
+        fig.add_trace(go.Scatter(x=t_kin, y=rot_et['yaw'], name='ET yaw', mode='lines',
+                                 line=dict(color=colors['Y_yaw'], dash='solid', width=line_w)), row=2, col=1)
+        fig.add_trace(go.Scatter(x=t_kin, y=rot_ihd['yaw'], name='IHD yaw', mode='lines',
+                                 line=dict(color=colors['Y_yaw'], dash='dash', width=line_w)), row=2, col=1)
+        fig.add_trace(go.Scatter(x=t_kin, y=rot_et['roll'], name='ET roll', mode='lines',
+                                 line=dict(color=colors['Z_roll'], dash='solid', width=line_w)), row=2, col=1)
+        fig.add_trace(go.Scatter(x=t_kin, y=rot_ihd['roll'], name='IHD roll', mode='lines',
+                                 line=dict(color=colors['Z_roll'], dash='dash', width=line_w)), row=2, col=1)
+
+        # 3. RMSE
+        fig.add_trace(go.Scatter(x=t_rmse, y=rmse3d, name='RMSE 3D', mode='lines',
+                                 line=dict(color='#9467bd', dash='solid', width=line_w)), row=3, col=1)
+        fig.add_trace(go.Scatter(x=t_rmse, y=rmse_temp, name='RMSE Temperature', mode='lines',
+                                 line=dict(color='#8c564b', dash='solid', width=line_w)), row=3, col=1)
+
+        # Format Plotly axes heavily to simulate publication readiness
+        fig.update_xaxes(showline=True, linewidth=1.5, linecolor='black', gridcolor='lightgrey')
+        fig.update_yaxes(showline=True, linewidth=1.5, linecolor='black', gridcolor='lightgrey')
+
+        fig.update_layout(
+            font=dict(family="Arial", size=12, color="black"),
+            plot_bgcolor='white',
+            legend=dict(bgcolor="white", bordercolor="black", borderwidth=1),
+            width=800, height=1000
+        )
+        fig.show()
 
 def bin_and_average(data_frames, bin_ms=200):
     """Binned JSON-Daten und berechnet korrekten Mittelwert/StdDev über mehrere Files."""
@@ -262,6 +407,197 @@ def create_plot(mean_df, std_df, csv_df, title, is_translation=True, lost_times=
     return fig
 
 
+def plot_evaluation_results_interactive(
+        t_kin, trans_et, trans_ihd, rot_et, rot_ihd,
+        t_rmse, rmse3d, rmse_temp, save_path=None
+):
+    """
+    Creates an interactive 3-fold Matplotlib plot.
+    Returns:
+        str: 'saved' if the user pressed Enter, or 'exit' if the user typed 'exit'.
+    """
+    # --- Okabe-Ito Color Palette ---
+    C_X_PITCH = '#D55E00'  # Vermillion
+    C_Y_YAW = '#56B4E9'  # Sky Blue
+    C_Z_ROLL = '#009E73'  # Bluish Green
+    C_RMSE3D =  '#CC79A7' # Orange
+    C_RMSETMP = '#E69F00'  # Reddish Purple
+
+    plt.rcParams.update({
+        'font.family': 'sans-serif', 'font.sans-serif': ['Arial'],
+        'font.size': 12, 'axes.edgecolor': 'black', 'axes.linewidth': 1.2,
+        'legend.frameon': True, 'legend.edgecolor': 'black'
+    })
+
+    # Auto-detect time regions based on Phantom movement
+    movement_mag = np.abs(trans_ihd['X']) + np.abs(trans_ihd['Y']) + np.abs(trans_ihd['Z'])
+    t_peak = t_kin[np.argmax(movement_mag)]
+
+    window_size = max(1, int(len(movement_mag) / 20))
+    min_var = float('inf')
+    t_flat_idx = 0
+    for i in range(0, len(movement_mag) - window_size, window_size):
+        var = np.var(movement_mag[i:i + window_size])
+        if var < min_var:
+            min_var = var
+            t_flat_idx = i + window_size // 2
+    t_flat = t_kin[t_flat_idx]
+
+    window_sec = 4.0
+
+    # State dictionary for the two zoom boxes
+    zooms = {
+        'peak': {
+            'ax_idx': 0,
+            'xlim': [max(0, t_peak - window_sec / 2), t_peak + window_sec / 2],
+            'ylim': None,  # None means auto-scale
+            'pos': [0.05, 0.60, 0.25, 0.35]
+        },
+        'flat': {
+            'ax_idx': 0,
+            'xlim': [max(0, t_flat - window_sec / 2), t_flat + window_sec / 2],
+            'ylim': None,
+            'pos': [0.70, 0.60, 0.25, 0.35]
+        }
+    }
+
+    fig = None
+
+    while True:
+        if fig is not None:
+            plt.close(fig)
+
+        fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True, dpi=100)
+        line_w = 1.2
+
+        # --- AXES 0: Translation ---
+        # Phantom (Dashed)
+        axes[0].plot(t_kin, trans_ihd['X'], label='IHD X', color=C_X_PITCH, linestyle='--', linewidth=line_w)
+        axes[0].plot(t_kin, trans_ihd['Y'], label='IHD Y', color=C_Y_YAW, linestyle='--', linewidth=line_w)
+        axes[0].plot(t_kin, trans_ihd['Z'], label='IHD Z', color=C_Z_ROLL, linestyle='--', linewidth=line_w)
+        # ETD (Solid)
+        axes[0].plot(t_kin, trans_et['X'], label='ET X (lat.)', color=C_X_PITCH, linestyle='-', linewidth=line_w)
+        axes[0].plot(t_kin, trans_et['Y'], label='ET Y (long.)', color=C_Y_YAW, linestyle='-', linewidth=line_w)
+        axes[0].plot(t_kin, trans_et['Z'], label='ET Z (vert.)', color=C_Z_ROLL, linestyle='-', linewidth=line_w)
+        axes[0].set_ylabel('Translation [mm]')
+        axes[0].legend(loc='upper right', ncol=2, fontsize=9)
+        axes[0].grid(True, linestyle=':', alpha=0.6)
+
+        # --- AXES 1: Rotation ---
+        # Phantom (Dashed)
+        axes[1].plot(t_kin, rot_ihd['pitch'], label='IHD pitch', color=C_X_PITCH, linestyle='--', linewidth=line_w)
+        axes[1].plot(t_kin, rot_ihd['yaw'], label='IHD yaw', color=C_Y_YAW, linestyle='--', linewidth=line_w)
+        axes[1].plot(t_kin, rot_ihd['roll'], label='IHD roll', color=C_Z_ROLL, linestyle='--', linewidth=line_w)
+        # ETD (Solid)
+        axes[1].plot(t_kin, rot_et['pitch'], label='ET pitch', color=C_X_PITCH, linestyle='-', linewidth=line_w)
+        axes[1].plot(t_kin, rot_et['yaw'], label='ET yaw', color=C_Y_YAW, linestyle='-', linewidth=line_w)
+        axes[1].plot(t_kin, rot_et['roll'], label='ET roll', color=C_Z_ROLL, linestyle='-', linewidth=line_w)
+        axes[1].set_ylabel('Rotation [°]')
+        axes[1].legend(loc='upper right', ncol=2, fontsize=9)
+        axes[1].grid(True, linestyle=':', alpha=0.6)
+
+        # --- AXES 2: RMSE ---
+        axes[2].plot(t_rmse, rmse3d, label='RMSE 3D', color=C_RMSE3D, linestyle='-', linewidth=line_w)
+        axes[2].plot(t_rmse, rmse_temp, label='RMSE Temp', color=C_RMSETMP, linestyle='-', linewidth=line_w)
+        axes[2].set_ylabel('RMSE')
+        axes[2].set_xlabel('Time [s]')
+        axes[2].legend(loc='upper right')
+        axes[2].grid(True, linestyle=':', alpha=0.6)
+
+        # --- Draw Zoom Boxes ---
+        for z_name, z_data in zooms.items():
+            ax_idx = z_data['ax_idx']
+            ax_main = axes[ax_idx]
+
+            axins = ax_main.inset_axes(z_data['pos'])
+
+            if ax_idx == 0:
+                axins.plot(t_kin, trans_ihd['X'], color=C_X_PITCH, linestyle='--')
+                axins.plot(t_kin, trans_ihd['Y'], color=C_Y_YAW, linestyle='--')
+                axins.plot(t_kin, trans_ihd['Z'], color=C_Z_ROLL, linestyle='--')
+                axins.plot(t_kin, trans_et['X'], color=C_X_PITCH)
+                axins.plot(t_kin, trans_et['Y'], color=C_Y_YAW)
+                axins.plot(t_kin, trans_et['Z'], color=C_Z_ROLL)
+            elif ax_idx == 1:
+                axins.plot(t_kin, rot_ihd['pitch'], color=C_X_PITCH, linestyle='--')
+                axins.plot(t_kin, rot_ihd['yaw'], color=C_Y_YAW, linestyle='--')
+                axins.plot(t_kin, rot_ihd['roll'], color=C_Z_ROLL, linestyle='--')
+                axins.plot(t_kin, rot_et['pitch'], color=C_X_PITCH)
+                axins.plot(t_kin, rot_et['yaw'], color=C_Y_YAW)
+                axins.plot(t_kin, rot_et['roll'], color=C_Z_ROLL)
+
+            # Set X limits
+            xlims = z_data['xlim']
+            axins.set_xlim(xlims)
+
+            # Apply manual or auto Y limits
+            if z_data['ylim'] is not None:
+                axins.set_ylim(z_data['ylim'])
+            else:
+                mask = (t_kin >= xlims[0]) & (t_kin <= xlims[1])
+                if mask.any():
+                    if ax_idx == 0:
+                        y_vals = np.concatenate([trans_ihd['X'][mask], trans_ihd['Y'][mask], trans_ihd['Z'][mask],
+                                                 trans_et['X'][mask], trans_et['Y'][mask], trans_et['Z'][mask]])
+                    else:
+                        y_vals = np.concatenate([rot_ihd['pitch'][mask], rot_ihd['yaw'][mask], rot_ihd['roll'][mask],
+                                                 rot_et['pitch'][mask], rot_et['yaw'][mask], rot_et['roll'][mask]])
+                    ymin, ymax = y_vals.min(), y_vals.max()
+                    margin = max(0.1, (ymax - ymin) * 0.15)
+                    axins.set_ylim(ymin - margin, ymax + margin)
+
+            axins.set_xticklabels([])
+            ax_main.indicate_inset_zoom(axins, edgecolor="black")
+
+        plt.tight_layout()
+        plt.show(block=False)
+        plt.pause(0.1)
+
+        # --- Interactive Terminal Loop ---
+        print("\n--- Plot Editor ---")
+        print(" [Enter]  Save and continue")
+        print(" [exit]   Abort batch evaluation (like old script)")
+        print(" Edit Box format: [box] [axis] [tmin] [tmax] [ymin]* [ymax]*")
+        print("          *ymin and ymax are optional.")
+        print(" Examples: 'peak 1 15.0 20.0'       (auto Y-limits)")
+        print("           'flat 0 10.0 15.0 -1 1'  (manual Y-limits from -1 to 1)")
+
+        cmd = input("Command: ").strip().lower()
+
+        if cmd == "exit":
+            plt.close(fig)
+            return 'exit'
+
+        elif cmd == "":
+            if save_path:
+                fig.savefig(save_path, dpi=300, bbox_inches='tight')
+                print(f"   [✓] Saved successfully to {save_path}")
+            plt.close(fig)
+            return 'saved'
+
+        else:
+            try:
+                parts = cmd.split()
+                if len(parts) >= 4:
+                    box_name, ax_idx = parts[0], int(parts[1])
+                    tmin, tmax = float(parts[2]), float(parts[3])
+                    ymin, ymax = None, None
+
+                    if len(parts) == 6:  # Manual Y-limits provided
+                        ymin, ymax = float(parts[4]), float(parts[5])
+
+                    if box_name in zooms and ax_idx in [0, 1]:
+                        zooms[box_name]['ax_idx'] = ax_idx
+                        zooms[box_name]['xlim'] = [tmin, tmax]
+                        zooms[box_name]['ylim'] = [ymin, ymax] if ymin is not None else None
+                        print(f"Updating {box_name} box...")
+                    else:
+                        print("Invalid box name ('peak' or 'flat') or axis index (0 or 1).")
+                else:
+                    print("Invalid format. Too few arguments.")
+            except Exception as e:
+                print(f"Error parsing input: {e}. Please use the correct format.")
+
 # --- 3. HAUPTAUSWERTUNG ---
 
 def main():
@@ -427,30 +763,54 @@ def main():
             continue
 
         mean_df, std_df = bin_and_average(all_json_dfs)
-        fig_trans = create_plot(mean_df, std_df, reference_csv_df, f"{gruppe_name} - Translation (Pads: {pad_status})",
-                                True, all_lost_times)
-        fig_rot = create_plot(mean_df, std_df, reference_csv_df, f"{gruppe_name} - Rotation (Pads: {pad_status})",
-                              False, all_lost_times)
 
-        fig_trans.show()
-        fig_rot.show()
+        t_kin = mean_df['Time_Bin'].values
 
-        cmd = input(
-            f"\nBilder für {gruppe_name} speichern? ('save' zum Speichern, 'exit' zum Abbruch, 'Enter' zum Überspringen): ").strip().lower()
-        if cmd == 'save':
-            out_dir = results_base_dir / gruppe_name / f"Group_Pads_{pad_status}"
-            out_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                fig_trans.write_image(out_dir / f"{gruppe_name}_Translation.png", scale=2)
-                fig_rot.write_image(out_dir / f"{gruppe_name}_Rotation.png", scale=2)
-                print(f"   [✓] Gespeichert in {out_dir}")
-            except ValueError as e:
-                print(f"   [!] Fehler beim Speichern (fehlt das 'kaleido' package?): {e}")
-        elif cmd == 'exit':
-            print("   [!] Verworfen. Beende Batch-Lauf.")
-            break
-        else:
-            print("   [!] Übersprungen.")
+        # Helper to interpolate CSV data to the binned JSON timeline
+        def get_interp(col):
+            csv_time = reference_csv_df['Time_Sec'].values - reference_csv_df['Time_Sec'].iloc[0]
+            # Handle possible uncertainties (ufloat) vs standard floats
+            if f'{col}_nominal' in reference_csv_df.columns:
+                arr = reference_csv_df[f'{col}_nominal'].values
+            else:
+                arr = np.array([getattr(v, 'n', v) for v in reference_csv_df[col]])
+            return np.interp(t_kin, csv_time, arr)
+
+        # Dictionary structures for clean passing to plot function
+        trans_et = {'X': mean_df['lateral'].values, 'Y': mean_df['longitudinal'].values, 'Z': mean_df['vertical'].values}
+        trans_ihd = {'X': get_interp('True_Lateral'), 'Y': get_interp('True_Longitudinal'),
+                     'Z': get_interp('True_Vertical')}
+        rot_et = {'pitch': mean_df['pitch'].values, 'yaw': mean_df['yaw'].values, 'roll': mean_df['roll'].values}
+        rot_ihd = {'pitch': get_interp('True_Pitch'), 'yaw': get_interp('True_Yaw'), 'roll': get_interp('True_Roll')}
+
+        # RMSE Extraction (Using the columns we confirmed in previous steps)
+        t_rmse = t_kin
+        rmse3d_vals = mean_df['rmse3d'].values if 'rmse3d' in mean_df.columns else np.zeros_like(t_kin)
+        rmse_temp_vals = mean_df['rmse_temp'].values if 'rmse_temp' in mean_df.columns else np.zeros_like(t_kin)
+
+        print(f"\nGeneriere Plot für {gruppe_name} (Pads: {pad_status})...")
+
+        # Determine save directory
+        out_dir = results_base_dir / gruppe_name / f"Group_Pads_{pad_status}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        save_path = out_dir / f"{gruppe_name}_Combined_Evaluation.png"
+
+        # Capture the result of the interactive session
+        session_result = plot_evaluation_results_interactive(
+            t_kin=t_kin,
+            trans_et=trans_et,
+            trans_ihd=trans_ihd,
+            rot_et=rot_et,
+            rot_ihd=rot_ihd,
+            t_rmse=t_rmse,
+            rmse3d=rmse3d_vals,
+            rmse_temp=rmse_temp_vals,
+            save_path=save_path
+        )
+
+        if session_result == 'exit':
+            print("\nAbbruch durch Benutzer ('exit').")
+            break  # Breaks out of the main batch loop completely
 
 
 

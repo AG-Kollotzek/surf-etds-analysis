@@ -34,7 +34,7 @@ class ETDQAProcessor:
         return self.df_csv
 
     def load_json(self, file_path):
-        """Lädt das ETD-Tracking Log und berechnet die 3D-Magnitude"""
+        """Lädt das ETD-Tracking Log und berechnet die 3D-Magnitude inkl. RMSE"""
 
         self.json_filename = os.path.basename(file_path)
         with open(file_path, 'r') as f:
@@ -44,10 +44,16 @@ class ETDQAProcessor:
         self.raw_lost_timestamps = []
         for entry in data['trackingResults']:
             if entry.get('trackingLost', False):
-                self.raw_lost_timestamps.append(entry['timestamp'])  # NEU
+                self.raw_lost_timestamps.append(entry['timestamp'])
             else:
                 shifts = {k: float(v) for k, v in entry['shiftValues'].items()}
                 shifts['timestamp_ms'] = entry['timestamp']
+
+                # --- NEW: Extract RMSE values here ---
+                # We use .get() with a fallback to np.nan in case a frame is missing the data
+                shifts['rmse3d'] = entry.get('rmse3D', np.nan)
+                shifts['rmse_temp'] = entry.get('rmseThermal', np.nan)
+
                 results.append(shifts)
 
         self.df_json = pd.DataFrame(results)
@@ -57,7 +63,7 @@ class ETDQAProcessor:
 
         # Internes Alignment nutzt Magnitude (unabhängig vom Vorzeichen)
         lat0, long0, vert0 = self.df_json['lateral'].iloc[0], self.df_json['longitudinal'].iloc[0], \
-        self.df_json['vertical'].iloc[0]
+            self.df_json['vertical'].iloc[0]
         self.df_json['Vector_Mag'] = np.sqrt(
             (self.df_json['lateral'] - lat0) ** 2 +
             (self.df_json['longitudinal'] - long0) ** 2 +
