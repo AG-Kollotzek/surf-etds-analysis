@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 import json
 import plotly.graph_objects as go
-from kinematics import SurfKinematics
+from kinematics import SurfKinematics as SurfKinematicsNominal
+from kinematics_werror import SurfKinematics
 from uncertainties import unumpy as unp
 import datetime
 import os
@@ -18,6 +19,8 @@ class ETDQAProcessor:
         self.df_json = None
         self.time_offset = 0
         self.terminal_version = terminal_version
+
+        self.kinematics_werror_dict = {}
 
     def load_csv(self, file_path):
         """Lädt das SURF-Terminal Log und korrigiert ggf. Vorzeichenfehler"""
@@ -460,3 +463,75 @@ class ETDQAProcessor:
             fig_raw.write_image(os.path.join(output_dir, f"{prefix}_Plot_RawMotors.png"), scale=2)
         except ValueError as e:
             print(f"WARNUNG: Plot konnte nicht gespeichert werden. Fehlt 'kaleido'? Error: {e}")
+
+    @staticmethod
+    def get_interp_data(df_json, df_csv, t_common):
+        """
+        Interpoliert JSON- und CSV-Signale auf ein gemeinsames Zeitraster.
+        Nutzt die bereits von apply_kinematics berechneten Spalten.
+        """
+        interp_results = {}
+
+        # 1. ETD (JSON) Signale interpolieren
+        for col in ['lateral', 'longitudinal', 'vertical', 'pitch', 'yaw', 'roll']:
+            interp_results[f'et_{col}'] = np.interp(t_common, df_json['Time_Sec'], df_json[col])
+
+        # Mapping von deinen CSV-Spaltennamen auf die kurzen Keys
+        csv_mapping = {
+            'X': 'True_Lateral',
+            'Y': 'True_Longitudinal',
+            'Z': 'True_Vertical',
+            'pitch': 'True_Pitch',
+            'roll': 'True_Roll',
+            'yaw': 'True_Yaw'
+        }
+
+        # 2. Phantom Nominalwerte AND die systematischen Fehler (_std) interpolieren
+        for key, csv_name in csv_mapping.items():
+            # Nominalwert der Plattform
+            interp_results[f'ihd_{key}_nom'] = np.interp(t_common, df_csv['Time_Sec'], df_csv[csv_name])
+
+            # Systematischer Fehler (aus deiner kinematics_werror) direkt aus der _std Spalte laden!
+            interp_results[f'ihd_{key}_sys_err'] = np.interp(t_common, df_csv['Time_Sec'], df_csv[f"{csv_name}_std"])
+
+        return interp_results
+
+    @staticmethod
+    def bin_and_average_measurements(processed_runs, t_common):
+        """
+        Mittelt die Durchgänge einer Gruppe (Kopie deiner Logik aus batch_evaluation).
+        Berechnet die Standardabweichung (statistischer Fehler) zwischen den Runs.
+        """
+        mean_curves = {}
+        stat_errors = {}
+
+        # Keys, die wir mitteln wollen
+        keys_to_average = [
+            'et_lateral', 'et_longitudinal', 'et_vertical', 'et_pitch', 'et_yaw', 'et_roll',
+            'ihd_X_nom', 'ihd_Y_nom', 'ihd_Z_nom', 'ihd_pitch_nom', 'ihd_roll_nom', 'ihd_yaw_nom',
+            'ihd_X_sys_err', 'ihd_Y_sys_err', 'ihd_Z_sys_err', 'ihd_pitch_sys_err', 'ihd_roll_sys_err',
+            'ihd_yaw_sys_err'
+        ]
+
+        for key in keys_to_average:
+            # Sammle die Kurven aller Durchgänge für diesen Key
+            matrix = np.array([run[key] for run in processed_runs])
+
+            # Mittelwert über die Achse der Durchgänge (axis=0)
+            mean_curves[key] = np.mean(matrix, axis=0)
+
+            # Für die Fehlerrechnung der DoFs bestimmen wir die rein statistische Abweichung (STDEV) zwischen den Läufen
+            # Wir mappen das hier direkt auf die kurzen Namen für den späteren CSV-Export
+            short_key = key.replace('et_', '').replace('ihd_', '').replace('_nom', '')
+            if short_key in ['lateral', 'longitudinal', 'vertical']:
+                # Mapping auf X, Y, Z für den Tabellenexport
+                short_key = {'lateral': 'X', 'longitudinal': 'Y', 'vertical': 'Z'}[short_key]
+
+            if key.startswith('et_'):
+                # Statistischer Fehler der ETD-Messungen untereinander
+                stat_errors[f'et_{short_key}_stat'] = np.std(matrix, axis=0)
+            elif '_nom' in key:
+                # Statistischer Fehler der Phantom-Läufe untereinander
+                stat_errors[f'ihd_{short_key}_stat'] = np.std(matrix, axis=0)
+
+        return mean_curves, stat_errors

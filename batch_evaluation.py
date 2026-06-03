@@ -532,6 +532,11 @@ def plot_evaluation_results_interactive(
         axes[1].fill_between(t_kin, rot_et['roll'] - std_rot['roll'], rot_et['roll'] + std_rot['roll'],
                              color=C_Z_ROLL, alpha=0.2, linewidth=0)
 
+        current_ymin, current_ymax = axes[1].get_ylim()
+        # Setzt das Limit auf mindestens -0.5 bis 0.5. Wenn die echten Werte
+        # (z.B. bei der Rotations-Gruppe) darüber hinausgehen, wächst die Achse automatisch mit!
+        axes[1].set_ylim(min(current_ymin, -0.5), max(current_ymax, 0.5))
+
         # --- AXES 2: RMSE ---
         axes[2].plot(t_rmse, rmse3d, label='RMSE 3D', color=C_RMSE3D, linestyle='-', linewidth=line_w)
         axes[2].plot(t_rmse, rmse_temp, label='RMSE Temp', color=C_RMSETMP, linestyle='-', linewidth=line_w)
@@ -678,6 +683,10 @@ def plot_evaluation_results_interactive(
                     print("Invalid format. Too few arguments.")
             except Exception as e:
                 print(f"Error parsing input: {e}. Please use the correct format.")
+
+
+
+
 # --- 3. HAUPTAUSWERTUNG ---
 
 def main():
@@ -844,6 +853,7 @@ def main():
 
         mean_df, std_df = bin_and_average(all_json_dfs)
         print(std_df.columns)
+        print()
         t_kin = mean_df['Time_Bin'].values
 
         # Helper to interpolate CSV data to the binned JSON timeline
