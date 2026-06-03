@@ -12,35 +12,36 @@ from tkinter import filedialog
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import gc
 
 # --- 1. KONFIGURATION & MESSDATEN-STRUKTUR ---
 
 # Automatisch aus dem Protokoll extrahierte Zuordnung
 MEASUREMENT_10032026 = {
-    '1': {'Gruppe': 'Standardmessung', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '160617',
-          'CSV': '160448'},
-    '2': {'Gruppe': 'Standardmessung', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '161117',
-          'CSV': '160950'},
-    '3': {'Gruppe': 'Standardmessung', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '161416',
-          'CSV': '161302'},
+    '1': {'Gruppe': 'All axes', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '160617',
+          'CSV': '160448', 'title': 'H, V, R'},
+    '2': {'Gruppe': 'All axes', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '161117',
+          'CSV': '160950', 'title': 'H, V, R'},
+    '3': {'Gruppe': 'All axes', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '161416',
+          'CSV': '161302', 'title': 'H, V, R'},
     '4': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '161724',
-          'CSV': '161538'},
+          'CSV': '161538', 'title': 'H'},
     '5': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162054',
-          'CSV': '161859'},
+          'CSV': '161859', 'title': 'H'},
     '6': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162326',
-          'CSV': '162130'},
-    '7': {'Gruppe': 'Vertikal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162647',
-          'CSV': '162451'},
-    '8': {'Gruppe': 'Vertikal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162922',
-          'CSV': '162728'},
-    '9': {'Gruppe': 'Vertikal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '163157',
-          'CSV': '162951'},
+          'CSV': '162130', 'title': 'H'},
+    '7': {'Gruppe': 'Vertical', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162647',
+          'CSV': '162451', 'title': 'V'},
+    '8': {'Gruppe': 'Vertical', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162922',
+          'CSV': '162728', 'title': 'V'},
+    '9': {'Gruppe': 'Vertical', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '163157',
+          'CSV': '162951', 'title': 'V'},
     '10': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '163508',
-           'CSV': '163325'},
+           'CSV': '163325', 'title': 'R'},
     '11': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '163758',
-           'CSV': '163613'},
+           'CSV': '163613', 'title': 'R'},
     '12': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '164007',
-           'CSV': '163820'},
+           'CSV': '163820', 'title': 'R'},
     '14': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '173928',
            'CSV': '173645'},
     '15': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '174334',
@@ -56,23 +57,23 @@ MEASUREMENT_10032026 = {
     '21': {'Gruppe': 'Vertical_Slide', 'Heatingpads': 'OFF', 'ETD': '182337', 'CSV': '182011'},
     '22': {'Gruppe': 'Vertical_Slide', 'Heatingpads': 'OFF', 'ETD': '182630', 'CSV': '182433'},
     '24': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190312',
-           'CSV': '190114'},
+           'CSV': '190114', 'title': 'H'},
     '25': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190609',
-           'CSV': '190405'},
+           'CSV': '190405', 'title': 'H'},
     '26': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190831',
-           'CSV': '190639'},
-    '27': {'Gruppe': 'Vertikal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '191212',
-           'CSV': '191006'},
-    '28': {'Gruppe': 'Vertikal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '191421',
-           'CSV': '191235'},
-    '29': {'Gruppe': 'Vertikal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '191651',
-           'CSV': '191507'},
+           'CSV': '190639', 'title': 'H'},
+    '27': {'Gruppe': 'Vertical', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '191212',
+           'CSV': '191006', 'title': 'V'},
+    '28': {'Gruppe': 'Vertical', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '191421',
+           'CSV': '191235', 'title': 'V'},
+    '29': {'Gruppe': 'Vertical', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '191651',
+           'CSV': '191507', 'title': 'V'},
     '30': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '192007',
-           'CSV': '191806'},
+           'CSV': '191806', 'title': 'R'},
     '31': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '192224',
-           'CSV': '192031'},
+           'CSV': '192031', 'title': 'R'},
     '32': {'Gruppe': 'Rotation', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '192441',
-           'CSV': '192250'},
+           'CSV': '192250', 'title': 'R'},
     '33': {'Gruppe': 'Variable_Geschwindigkeit', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '192853',
            'CSV': '192615'},
     '34': {'Gruppe': 'Vertical_Slide', 'Heatingpads': '32', 'ETD': '193528', 'CSV': '193140'},
@@ -177,7 +178,7 @@ def plot_evaluation_results(
         axes[2].legend(loc='upper right')
         axes[2].grid(True, linestyle=':', alpha=0.6)
 
-        plt.tight_layout()
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
         if save_path:
             plt.savefig(save_path, dpi=600, bbox_inches='tight')  # High res output
         plt.show()
@@ -409,7 +410,8 @@ def create_plot(mean_df, std_df, csv_df, title, is_translation=True, lost_times=
 
 def plot_evaluation_results_interactive(
         t_kin, trans_et, trans_ihd, rot_et, rot_ihd,
-        t_rmse, rmse3d, rmse_temp, save_path=None
+        std_trans, std_rot,
+        t_rmse, rmse3d, rmse_temp, save_path=None, group_name="Unbekannte Gruppe"
 ):
     """
     Creates an interactive 3-fold Matplotlib plot.
@@ -420,7 +422,7 @@ def plot_evaluation_results_interactive(
     C_X_PITCH = '#D55E00'  # Vermillion
     C_Y_YAW = '#56B4E9'  # Sky Blue
     C_Z_ROLL = '#009E73'  # Bluish Green
-    C_RMSE3D =  '#CC79A7' # Orange
+    C_RMSE3D = '#CC79A7'  # Orange
     C_RMSETMP = '#E69F00'  # Reddish Purple
 
     plt.rcParams.update({
@@ -445,19 +447,27 @@ def plot_evaluation_results_interactive(
 
     window_sec = 4.0
 
+    # --- NEW: Mapping für Box-Positionen (x0, y0, width, height) ---
+    POS_MAP = {
+        'upper-left': [0.05, 0.60, 0.25, 0.35], 'top-left': [0.05, 0.60, 0.25, 0.35],
+        'upper-right': [0.60, 0.60, 0.25, 0.35], 'top-right': [0.60, 0.60, 0.25, 0.35],
+        'lower-left': [0.05, 0.05, 0.25, 0.35], 'bottom-left': [0.05, 0.05, 0.25, 0.35],
+        'lower-right': [0.70, 0.05, 0.25, 0.35], 'bottom-right': [0.70, 0.05, 0.25, 0.35]
+    }
+
     # State dictionary for the two zoom boxes
     zooms = {
         'peak': {
             'ax_idx': 0,
             'xlim': [max(0, t_peak - window_sec / 2), t_peak + window_sec / 2],
             'ylim': None,  # None means auto-scale
-            'pos': [0.05, 0.60, 0.25, 0.35]
+            'pos': POS_MAP['upper-left']
         },
         'flat': {
             'ax_idx': 0,
             'xlim': [max(0, t_flat - window_sec / 2), t_flat + window_sec / 2],
             'ylim': None,
-            'pos': [0.70, 0.60, 0.25, 0.35]
+            'pos': POS_MAP['upper-right']
         }
     }
 
@@ -466,8 +476,18 @@ def plot_evaluation_results_interactive(
     while True:
         if fig is not None:
             plt.close(fig)
+            gc.collect()
 
+        # Einmaliges Erstellen von Figure und Axes
         fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True, dpi=100)
+
+        # Haupttitel direkt hier setzen
+        fig.suptitle(f"ExacTrac surface outputs vs. IHD (with moving axes: {group_name})",
+                     fontsize=16, fontweight='bold')
+
+        # Layout anpassen, damit der Titel nicht überlappt
+        fig.tight_layout(rect=[0.02, 0.02, 1, 0.98])
+
         line_w = 1.2
 
         # --- AXES 0: Translation ---
@@ -483,6 +503,14 @@ def plot_evaluation_results_interactive(
         axes[0].legend(loc='upper right', ncol=1, fontsize=9)
         axes[0].grid(True, linestyle=':', alpha=0.6)
 
+        # --- NEU: Standardabweichungs-Bänder (Schläuche) ---
+        axes[0].fill_between(t_kin, trans_et['X'] - std_trans['X'], trans_et['X'] + std_trans['X'],
+                             color=C_X_PITCH, alpha=0.2, linewidth=0)
+        axes[0].fill_between(t_kin, trans_et['Y'] - std_trans['Y'], trans_et['Y'] + std_trans['Y'],
+                             color=C_Y_YAW, alpha=0.2, linewidth=0)
+        axes[0].fill_between(t_kin, trans_et['Z'] - std_trans['Z'], trans_et['Z'] + std_trans['Z'],
+                             color=C_Z_ROLL, alpha=0.2, linewidth=0)
+
         # --- AXES 1: Rotation ---
         # Phantom (Dashed)
         axes[1].plot(t_kin, rot_ihd['pitch'], label='IHD pitch', color=C_X_PITCH, linestyle='--', linewidth=line_w)
@@ -495,6 +523,14 @@ def plot_evaluation_results_interactive(
         axes[1].set_ylabel('Rotation [°]')
         axes[1].legend(loc='upper right', ncol=1, fontsize=9)
         axes[1].grid(True, linestyle=':', alpha=0.6)
+
+        # --- NEU: Standardabweichungs-Bänder für Rotation ---
+        axes[1].fill_between(t_kin, rot_et['pitch'] - std_rot['pitch'], rot_et['pitch'] + std_rot['pitch'],
+                             color=C_X_PITCH, alpha=0.2, linewidth=0)
+        axes[1].fill_between(t_kin, rot_et['yaw'] - std_rot['yaw'], rot_et['yaw'] + std_rot['yaw'],
+                             color=C_Y_YAW, alpha=0.2, linewidth=0)
+        axes[1].fill_between(t_kin, rot_et['roll'] - std_rot['roll'], rot_et['roll'] + std_rot['roll'],
+                             color=C_Z_ROLL, alpha=0.2, linewidth=0)
 
         # --- AXES 2: RMSE ---
         axes[2].plot(t_rmse, rmse3d, label='RMSE 3D', color=C_RMSE3D, linestyle='-', linewidth=line_w)
@@ -518,6 +554,13 @@ def plot_evaluation_results_interactive(
                 axins.plot(t_kin, trans_et['X'], color=C_X_PITCH)
                 axins.plot(t_kin, trans_et['Y'], color=C_Y_YAW)
                 axins.plot(t_kin, trans_et['Z'], color=C_Z_ROLL)
+                # NEU: Auch in der Zoom-Box die Schläuche zeichnen
+                axins.fill_between(t_kin, trans_et['X'] - std_trans['X'], trans_et['X'] + std_trans['X'],
+                                   color=C_X_PITCH, alpha=0.2)
+                axins.fill_between(t_kin, trans_et['Y'] - std_trans['Y'], trans_et['Y'] + std_trans['Y'], color=C_Y_YAW,
+                                   alpha=0.2)
+                axins.fill_between(t_kin, trans_et['Z'] - std_trans['Z'], trans_et['Z'] + std_trans['Z'],
+                                   color=C_Z_ROLL, alpha=0.2)
             elif ax_idx == 1:
                 axins.plot(t_kin, rot_ihd['pitch'], color=C_X_PITCH, linestyle='--')
                 axins.plot(t_kin, rot_ihd['yaw'], color=C_Y_YAW, linestyle='--')
@@ -525,6 +568,13 @@ def plot_evaluation_results_interactive(
                 axins.plot(t_kin, rot_et['pitch'], color=C_X_PITCH)
                 axins.plot(t_kin, rot_et['yaw'], color=C_Y_YAW)
                 axins.plot(t_kin, rot_et['roll'], color=C_Z_ROLL)
+                # NEU: Auch in der Zoom-Box die Schläuche zeichnen
+                axins.fill_between(t_kin, rot_et['X'] - std_rot['X'], rot_et['X'] + std_rot['X'],
+                                   color=C_X_PITCH, alpha=0.2)
+                axins.fill_between(t_kin, rot_et['Y'] - std_rot['Y'], rot_et['Y'] + std_rot['Y'], color=C_Y_YAW,
+                                   alpha=0.2)
+                axins.fill_between(t_kin, rot_et['Z'] - std_rot['Z'], rot_et['Z'] + std_rot['Z'],
+                                   color=C_Z_ROLL, alpha=0.2)
 
             # Set X limits
             xlims = z_data['xlim']
@@ -549,18 +599,21 @@ def plot_evaluation_results_interactive(
             axins.set_xticklabels([])
             ax_main.indicate_inset_zoom(axins, edgecolor="black")
 
-        plt.tight_layout()
         plt.show(block=False)
         plt.pause(0.1)
 
         # --- Interactive Terminal Loop ---
         print("\n--- Plot Editor ---")
-        print(" [Enter]  Save and continue")
-        print(" [exit]   Abort batch evaluation (like old script)")
-        print(" Edit Box format: [box] [axis] [tmin] [tmax] [ymin]* [ymax]*")
-        print("          *ymin and ymax are optional.")
-        print(" Examples: 'peak 1 15.0 20.0'       (auto Y-limits)")
-        print("           'flat 0 10.0 15.0 -1 1'  (manual Y-limits from -1 to 1)")
+        print(" [Enter]    Save and continue")
+        print(" [exit]     Abort batch evaluation")
+        print(" [box off]  Entfernt alle Zoom-Boxen")
+        print(" Edit Box format: [box] [axis] [tmin] [tmax] [ymin]* [ymax]* [position]*")
+        print("          *ymin, ymax und position sind optional.")
+        print("          Verfügbare Positionen: upper-left, upper-right, lower-left, lower-right")
+        print(" Beispiele: 'peak 1 15.0 20.0'                   (Auto Y-Limits)")
+        print("            'flat 0 10.0 15.0 -1 1'              (Manuelle Y-Limits)")
+        print("            'peak 1 15.0 20.0 lower-right'       (Auto Limits + unten rechts)")
+        print("            'flat 0 10.0 15.0 -1 1 upper-left'   (Manuelle Limits + oben links)")
 
         cmd = input("Command: ").strip().lower()
 
@@ -570,10 +623,14 @@ def plot_evaluation_results_interactive(
 
         elif cmd == "":
             if save_path:
-                fig.savefig(save_path, dpi=300, bbox_inches='tight')
+                fig.savefig(save_path, dpi=300, bbox_inches='tight', format='pdf', metadata={'Creator': 'MyEvaluationTool'})
                 print(f"   [✓] Saved successfully to {save_path}")
             plt.close(fig)
             return 'saved'
+
+        elif cmd == "box off":
+            zooms.clear()
+            print("   [i] Alle Zoom-Boxen wurden ausgeblendet.")
 
         else:
             try:
@@ -582,14 +639,38 @@ def plot_evaluation_results_interactive(
                     box_name, ax_idx = parts[0], int(parts[1])
                     tmin, tmax = float(parts[2]), float(parts[3])
                     ymin, ymax = None, None
+                    new_pos = None
 
-                    if len(parts) == 6:  # Manual Y-limits provided
-                        ymin, ymax = float(parts[4]), float(parts[5])
+                    # Parse optionale Argumente am Ende des Strings
+                    rem_parts = parts[4:]
 
-                    if box_name in zooms and ax_idx in [0, 1]:
+                    # Prüfen, ob das letzte Wort ein Positions-Key ist
+                    if rem_parts and rem_parts[-1] in POS_MAP:
+                        new_pos = POS_MAP[rem_parts.pop()]
+
+                    # Sind danach noch genau zwei Elemente übrig, sind es die y-Limits
+                    if len(rem_parts) == 2:
+                        ymin, ymax = float(rem_parts[0]), float(rem_parts[1])
+                    elif len(rem_parts) != 0:
+                        print(
+                            "   [!] Ignoriere fehlerhafte Y-Limit Parameter. (Gib entweder beide Y-Werte an oder keinen)")
+
+                    # Falls der User die Boxen zuvor mit "box off" gelöscht hat,
+                    # müssen wir sie wieder im Dictionary initialisieren:
+                    if box_name in ['peak', 'flat']:
+                        if box_name not in zooms:
+                            default_pos = POS_MAP['upper-left'] if box_name == 'peak' else POS_MAP['upper-right']
+                            zooms[box_name] = {'pos': default_pos}
+
+                        # Neue Werte zuweisen
                         zooms[box_name]['ax_idx'] = ax_idx
                         zooms[box_name]['xlim'] = [tmin, tmax]
                         zooms[box_name]['ylim'] = [ymin, ymax] if ymin is not None else None
+
+                        # Position updaten, sofern angegeben
+                        if new_pos is not None:
+                            zooms[box_name]['pos'] = new_pos
+
                         print(f"Updating {box_name} box...")
                     else:
                         print("Invalid box name ('peak' or 'flat') or axis index (0 or 1).")
@@ -597,12 +678,11 @@ def plot_evaluation_results_interactive(
                     print("Invalid format. Too few arguments.")
             except Exception as e:
                 print(f"Error parsing input: {e}. Please use the correct format.")
-
 # --- 3. HAUPTAUSWERTUNG ---
 
 def main():
     print("=== KONFIGURATION BATCH-EVALUIERUNG ===")
-    print("Beispiele: 'all', 'all off', 'vertikal off', 'longitudinal 32 crop', 'other'")
+    print("Beispiele: 'all', 'all off', 'vertikal off', 'longitudinal 32 crop', 'other' für eigenen Dateipfad ")
     eval_input = input("Welchen Auswertungsmodus wählen?: ").strip().lower().split()
 
     if not eval_input:
@@ -763,7 +843,7 @@ def main():
             continue
 
         mean_df, std_df = bin_and_average(all_json_dfs)
-
+        print(std_df.columns)
         t_kin = mean_df['Time_Bin'].values
 
         # Helper to interpolate CSV data to the binned JSON timeline
@@ -795,6 +875,19 @@ def main():
         out_dir.mkdir(parents=True, exist_ok=True)
         save_path = out_dir / f"{gruppe_name}_Combined_Evaluation.png"
 
+        # Korrekt: Verwende std_df und die Original-Spaltennamen
+        std_trans = {
+            'X': std_df['lateral'].values,
+            'Y': std_df['longitudinal'].values,
+            'Z': std_df['vertical'].values
+        }
+
+        std_rot = {
+            'pitch': std_df['pitch'].values,
+            'yaw': std_df['yaw'].values,
+            'roll': std_df['roll'].values
+        }
+
         # Capture the result of the interactive session
         session_result = plot_evaluation_results_interactive(
             t_kin=t_kin,
@@ -802,10 +895,13 @@ def main():
             trans_ihd=trans_ihd,
             rot_et=rot_et,
             rot_ihd=rot_ihd,
+            std_trans=std_trans,
+            std_rot=std_rot,
             t_rmse=t_rmse,
             rmse3d=rmse3d_vals,
             rmse_temp=rmse_temp_vals,
-            save_path=save_path
+            save_path=save_path,
+            group_name= gruppe_name
         )
 
         if session_result == 'exit':
