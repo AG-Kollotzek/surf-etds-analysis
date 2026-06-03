@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 from uncertainties import ufloat
 from uncertainties import unumpy as unp
+from uncertainties import ufloat
 from DataConverter import ETDQAProcessor
 
 # Importiere die Konfiguration direkt aus deiner funktionierenden batch_evaluation
@@ -196,6 +197,24 @@ for gruppe_name in ['Longitudinal', 'Vertical', 'Rotation']:
 
             df_rmsd.loc[row_label, (col_label, temp_label)] = format_uval(rmsd_uval)
             df_maxdev.loc[row_label, (col_label, temp_label)] = format_uval(maxdev_uval)
+
+            # Direkt in der DOF-Schleife von export_metrics_csv.py einfügen (ohne if!):
+            print(f"\n--- SANITY CHECK [{row_label} | {temp_label}°C | {col_label}] ---")
+            print(f"ETD Signal Länge: {len(etd_sig)}")
+            print(f"ETD Signal Start/Ende: {etd_sig[0]} ... {etd_sig[-1]}")
+            print(f"Phantom Signal Start/Ende: {phantom_nom[0]} ... {phantom_nom[-1]}")
+            # Berechne die echte Bewegung des Phantoms (Spannweite)
+            phantom_min = np.min(phantom_nom)
+            phantom_max = np.max(phantom_nom)
+
+            print(f"Phantom Signal Start/Ende: {phantom_nom[0]} ... {phantom_nom[-1]}")
+            print(f"Phantom Signal Bereich (Min bis Max): {phantom_min} mm/° bis {phantom_max} mm/°")
+            # Kopiere kurz exakt die Formel aus create_plot:
+            valid_idx = ~np.isnan(etd_sig) & ~np.isnan(phantom_nom)
+            diff = etd_sig[valid_idx] - phantom_nom[valid_idx]
+            test_rmsd = np.sqrt(np.mean(diff ** 2))
+            print(f"Nackter RMSD ohne uncertainties: {test_rmsd}")
+            print(f"Berechneter RMSD (mit Unsicherheiten): {format_uval(rmsd_uval)}")
 
 # ==========================================
 # 6. EXPORT
