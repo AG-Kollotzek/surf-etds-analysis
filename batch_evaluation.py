@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import gc
+# Ganz oben bei deinen anderen Imports einfügen:
+from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
 # --- 1. KONFIGURATION & MESSDATEN-STRUKTUR ---
 
@@ -24,11 +26,11 @@ MEASUREMENT_10032026 = {
           'CSV': '160950', 'title': 'H, V, R'},
     '3': {'Gruppe': 'All axes', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '161416',
           'CSV': '161302', 'title': 'H, V, R'},
-    '4': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '161724',
+    '4': {'Gruppe': 'Horizontal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '161724',
           'CSV': '161538', 'title': 'H'},
-    '5': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162054',
+    '5': {'Gruppe': 'Horizontal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162054',
           'CSV': '161859', 'title': 'H'},
-    '6': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162326',
+    '6': {'Gruppe': 'Horizontal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162326',
           'CSV': '162130', 'title': 'H'},
     '7': {'Gruppe': 'Vertical', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': 'OFF', 'ETD': '162647',
           'CSV': '162451', 'title': 'V'},
@@ -56,11 +58,11 @@ MEASUREMENT_10032026 = {
            'CSV': '175824'},
     '21': {'Gruppe': 'Vertical_Slide', 'Heatingpads': 'OFF', 'ETD': '182337', 'CSV': '182011'},
     '22': {'Gruppe': 'Vertical_Slide', 'Heatingpads': 'OFF', 'ETD': '182630', 'CSV': '182433'},
-    '24': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190312',
+    '24': {'Gruppe': 'Horizontal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190312',
            'CSV': '190114', 'title': 'H'},
-    '25': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190609',
+    '25': {'Gruppe': 'Horizontal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190609',
            'CSV': '190405', 'title': 'H'},
-    '26': {'Gruppe': 'Longitudinal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190831',
+    '26': {'Gruppe': 'Horizontal', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '190831',
            'CSV': '190639', 'title': 'H'},
     '27': {'Gruppe': 'Vertical', 'ROI_Area': 'PhantomWithBuffer', 'Heatingpads': '32', 'ETD': '191212',
            'CSV': '191006', 'title': 'V'},
@@ -80,6 +82,19 @@ MEASUREMENT_10032026 = {
     '35': {'Gruppe': 'Vertical_Slide', 'Heatingpads': '32', 'ETD': '193801', 'CSV': '193557'},
 }
 
+CONFIG_FILE = 'zoom_box_config.json'
+
+def load_box_config():
+    """Lädt die gespeicherten Boxen aus der JSON-Datei."""
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    return {} # Gibt ein leeres Dictionary zurück, falls die Datei noch nicht existiert
+
+def save_box_config(config_data):
+    """Speichert das Dictionary in der JSON-Datei ab."""
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config_data, f, indent=4)
 
 # --- 2. HILFSFUNKTIONEN ---
 
@@ -190,15 +205,15 @@ def plot_evaluation_results(
         line_w = 1.5
 
         # 1. Translation
-        fig.add_trace(go.Scatter(x=t_kin, y=trans_et['X'], name='ET X (lat.)', mode='lines',
+        fig.add_trace(go.Scatter(x=t_kin, y=trans_et['X'], name='ET X', mode='lines',
                                  line=dict(color=colors['X_pitch'], dash='solid', width=line_w)), row=1, col=1)
         fig.add_trace(go.Scatter(x=t_kin, y=trans_ihd['X'], name='IHD X', mode='lines',
                                  line=dict(color=colors['X_pitch'], dash='dash', width=line_w)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=t_kin, y=trans_et['Y'], name='ET Y (long.)', mode='lines',
+        fig.add_trace(go.Scatter(x=t_kin, y=trans_et['Y'], name='ET Y', mode='lines',
                                  line=dict(color=colors['Y_yaw'], dash='solid', width=line_w)), row=1, col=1)
         fig.add_trace(go.Scatter(x=t_kin, y=trans_ihd['Y'], name='IHD Y', mode='lines',
                                  line=dict(color=colors['Y_yaw'], dash='dash', width=line_w)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=t_kin, y=trans_et['Z'], name='ET Z (vert.)', mode='lines',
+        fig.add_trace(go.Scatter(x=t_kin, y=trans_et['Z'], name='ET Z', mode='lines',
                                  line=dict(color=colors['Z_roll'], dash='solid', width=line_w)), row=1, col=1)
         fig.add_trace(go.Scatter(x=t_kin, y=trans_ihd['Z'], name='IHD Z', mode='lines',
                                  line=dict(color=colors['Z_roll'], dash='dash', width=line_w)), row=1, col=1)
@@ -451,8 +466,10 @@ def plot_evaluation_results_interactive(
     POS_MAP = {
         'upper-left': [0.05, 0.60, 0.25, 0.35], 'top-left': [0.05, 0.60, 0.25, 0.35],
         'upper-right': [0.60, 0.60, 0.25, 0.35], 'top-right': [0.60, 0.60, 0.25, 0.35],
+        'upper-mid': [0.375, 0.60, 0.25, 0.35],
         'lower-left': [0.05, 0.05, 0.25, 0.35], 'bottom-left': [0.05, 0.05, 0.25, 0.35],
-        'lower-right': [0.70, 0.05, 0.25, 0.35], 'bottom-right': [0.70, 0.05, 0.25, 0.35]
+        'lower-right': [0.70, 0.05, 0.25, 0.35], 'bottom-right': [0.70, 0.05, 0.25, 0.35],
+        'lower-mid': [0.375, 0.05, 0.25, 0.35]
     }
 
     # State dictionary for the two zoom boxes
@@ -461,16 +478,28 @@ def plot_evaluation_results_interactive(
             'ax_idx': 0,
             'xlim': [max(0, t_peak - window_sec / 2), t_peak + window_sec / 2],
             'ylim': None,  # None means auto-scale
-            'pos': POS_MAP['upper-left']
+            'pos': POS_MAP['upper-left'],
+            'active': True
         },
         'flat': {
             'ax_idx': 0,
             'xlim': [max(0, t_flat - window_sec / 2), t_flat + window_sec / 2],
             'ylim': None,
-            'pos': POS_MAP['upper-right']
+            'pos': POS_MAP['upper-right'],
+            'active': True
         }
     }
+    # 1. Bisherige Konfiguration laden
+    box_config = load_box_config()
 
+    if group_name in box_config:
+        # Wenn wir schon gespeicherte Boxen haben, überschreibe die Auto-Detect-Werte
+        zooms = box_config[group_name]
+        print(f"Lade gespeicherte Zoom-Boxen für Gruppe '{group_name}'.")
+    else:
+        # Wenn die Gruppe neu ist, speichern wir sofort die Auto-Detect-Werte ab
+        box_config[group_name] = zooms
+        save_box_config(box_config)
     fig = None
 
     while True:
@@ -496,9 +525,9 @@ def plot_evaluation_results_interactive(
         axes[0].plot(t_kin, trans_ihd['Y'], label='IHD Y', color=C_Y_YAW, linestyle='--', linewidth=line_w)
         axes[0].plot(t_kin, trans_ihd['Z'], label='IHD Z', color=C_Z_ROLL, linestyle='--', linewidth=line_w)
         # ETD (Solid)
-        axes[0].plot(t_kin, trans_et['X'], label='ET X (lat.)', color=C_X_PITCH, linestyle='-', linewidth=line_w)
-        axes[0].plot(t_kin, trans_et['Y'], label='ET Y (long.)', color=C_Y_YAW, linestyle='-', linewidth=line_w)
-        axes[0].plot(t_kin, trans_et['Z'], label='ET Z (vert.)', color=C_Z_ROLL, linestyle='-', linewidth=line_w)
+        axes[0].plot(t_kin, trans_et['X'], label='ET X', color=C_X_PITCH, linestyle='-', linewidth=line_w)
+        axes[0].plot(t_kin, trans_et['Y'], label='ET Y', color=C_Y_YAW, linestyle='-', linewidth=line_w)
+        axes[0].plot(t_kin, trans_et['Z'], label='ET Z', color=C_Z_ROLL, linestyle='-', linewidth=line_w)
         axes[0].set_ylabel('Translation [mm]')
         axes[0].legend(loc='upper right', ncol=1, fontsize=9)
         axes[0].grid(True, linestyle=':', alpha=0.6)
@@ -547,11 +576,30 @@ def plot_evaluation_results_interactive(
 
         # --- Draw Zoom Boxes ---
         for z_name, z_data in zooms.items():
-            ax_idx = z_data['ax_idx']
+            # 1. Datentypen absolut sicher bereinigen (JSON liefert oft Listen oder Strings)
+            if not z_data.get('active', True):
+                continue
+            try:
+                ax_idx = int(z_data['ax_idx'])
+                box_pos = [float(x) for x in z_data['pos']]
+                xlims = tuple(float(x) for x in z_data['xlim'])
+            except (KeyError, TypeError, ValueError) as e:
+                print(f"   [!] Fehlerhafte Zoom-Box-Daten für '{z_name}' übersprungen: {e}")
+                continue
+
             ax_main = axes[ax_idx]
 
-            axins = ax_main.inset_axes(z_data['pos'])
+            # --- NEU: ALTE LINIE UND ALTE INSETS RADIKAL ENTFERNEN ---
+            # Entfernt alle manuell hinzugefügten Verbindungslinien (Artists) der Vorsaison
+            from matplotlib.patches import ConnectionPatch
+            for artist in list(ax_main.get_children()):
+                if isinstance(artist, ConnectionPatch):
+                    artist.remove()
 
+            # Inset-Achse erstellen
+            axins = ax_main.inset_axes(box_pos)
+            axins.set_facecolor((1.0, 1.0, 1.0, 0.6))
+            # Plots in die Inset-Achse zeichnen
             if ax_idx == 0:
                 axins.plot(t_kin, trans_ihd['X'], color=C_X_PITCH, linestyle='--')
                 axins.plot(t_kin, trans_ihd['Y'], color=C_Y_YAW, linestyle='--')
@@ -559,7 +607,6 @@ def plot_evaluation_results_interactive(
                 axins.plot(t_kin, trans_et['X'], color=C_X_PITCH)
                 axins.plot(t_kin, trans_et['Y'], color=C_Y_YAW)
                 axins.plot(t_kin, trans_et['Z'], color=C_Z_ROLL)
-                # NEU: Auch in der Zoom-Box die Schläuche zeichnen
                 axins.fill_between(t_kin, trans_et['X'] - std_trans['X'], trans_et['X'] + std_trans['X'],
                                    color=C_X_PITCH, alpha=0.2)
                 axins.fill_between(t_kin, trans_et['Y'] - std_trans['Y'], trans_et['Y'] + std_trans['Y'], color=C_Y_YAW,
@@ -573,22 +620,29 @@ def plot_evaluation_results_interactive(
                 axins.plot(t_kin, rot_et['pitch'], color=C_X_PITCH)
                 axins.plot(t_kin, rot_et['yaw'], color=C_Y_YAW)
                 axins.plot(t_kin, rot_et['roll'], color=C_Z_ROLL)
-                # NEU: Auch in der Zoom-Box die Schläuche zeichnen
-                axins.fill_between(t_kin, rot_et['X'] - std_rot['X'], rot_et['X'] + std_rot['X'],
+                axins.fill_between(t_kin, rot_et['pitch'] - std_rot['pitch'], rot_et['pitch'] + std_rot['pitch'],
                                    color=C_X_PITCH, alpha=0.2)
-                axins.fill_between(t_kin, rot_et['Y'] - std_rot['Y'], rot_et['Y'] + std_rot['Y'], color=C_Y_YAW,
-                                   alpha=0.2)
-                axins.fill_between(t_kin, rot_et['Z'] - std_rot['Z'], rot_et['Z'] + std_rot['Z'],
+                axins.fill_between(t_kin, rot_et['yaw'] - std_rot['yaw'], rot_et['yaw'] + std_rot['yaw'],
+                                   color=C_Y_YAW, alpha=0.2)
+                axins.fill_between(t_kin, rot_et['roll'] - std_rot['roll'], rot_et['roll'] + std_rot['roll'],
                                    color=C_Z_ROLL, alpha=0.2)
 
-            # Set X limits
-            xlims = z_data['xlim']
+            # Setze X-Limits als echtes Tupel
             axins.set_xlim(xlims)
 
             # Apply manual or auto Y limits
-            if z_data['ylim'] is not None:
-                axins.set_ylim(z_data['ylim'])
-            else:
+            # Validiert, ob ylim existiert und nicht [None, None] oder eine leere Liste ist
+            has_manual_ylim = False
+            if z_data.get('ylim') is not None:
+                ylims = z_data['ylim']
+                if len(ylims) == 2 and ylims[0] is not None and ylims[1] is not None:
+                    try:
+                        axins.set_ylim(tuple(float(y) for y in ylims))
+                        has_manual_ylim = True
+                    except (ValueError, TypeError):
+                        pass
+
+            if not has_manual_ylim:
                 mask = (t_kin >= xlims[0]) & (t_kin <= xlims[1])
                 if mask.any():
                     if ax_idx == 0:
@@ -602,16 +656,79 @@ def plot_evaluation_results_interactive(
                     axins.set_ylim(ymin - margin, ymax + margin)
 
             axins.set_xticklabels([])
-            ax_main.indicate_inset_zoom(axins, edgecolor="black")
+
+            # 2. mark_inset NUR noch für das Rechteck auf der Hauptachse nutzen
+            try:
+                rect, connects = mark_inset(ax_main, axins, loc1=1, loc2=2, fc="none", ec="black", lw=1)
+                # Wir machen ALLE automatischen Linien von mark_inset unsichtbar!
+                for c in connects:
+                    c.set_visible(False)
+            except Exception as e:
+                print(f"   [!] Fehler beim Zeichnen des Rechtecks für '{z_name}': {e}")
+                from matplotlib.patches import Rectangle
+                xlim_main = axins.get_xlim()
+                ylim_main = axins.get_ylim()
+                rect = Rectangle((xlim_main[0], ylim_main[0]), xlim_main[1] - xlim_main[0], ylim_main[1] - ylim_main[0],
+                                 facecolor='none', edgecolor='black', linewidth=1)
+                ax_main.add_patch(rect)
+
+            # 3. DYNAMISCHE & KREUZUNGSFREIE VERBINDUNGSLINIEN
+            from matplotlib.patches import ConnectionPatch
+
+            # Grenzen der kleinen Box im Hauptplot (in Daten-Koordinaten)
+            x_main_min, x_main_max = axins.get_xlim()
+            y_main_min, y_main_max = axins.get_ylim()
+
+            # Mitte der kleinen Box auf der X-Achse berechnen
+            x_main_center = (x_main_min + x_main_max) / 2.0
+
+            # Die Position der großen Zoom-Box (z_data['pos']) ist in "Axes Fraction" (0.0 bis 1.0)
+            # Wir wandeln die X-Mitte der großen Box in Daten-Koordinaten um, um sie direkt zu vergleichen!
+            trans_fraction_to_data = ax_main.transAxes + ax_main.transData.inverted()
+            x_box_center_fraction = z_data['pos'][0] + (z_data['pos'][2] / 2.0)
+
+            # Die Mitte der großen Box ausgedrückt in den echten Werten der X-Achse:
+            x_box_center_data = trans_fraction_to_data.transform((x_box_center_fraction, 0.5))[0]
+
+            # Vergleich: Liegt die große Zoom-Box RECHTS oder LINKS von der kleinen Box?
+            if x_box_center_data > x_main_center:
+                # --- GROSSE BOX LIEGT RECHTS ---
+                # Verbinde die RECHTEN Ecken der kleinen Box mit den LINKEN Ecken der großen Box
+
+                # Oben-Rechts (klein) -> Oben-Links (groß, d.h. x=0.0, y=1.0 in axes fraction)
+                cp_top = ConnectionPatch(xyA=(x_main_max, y_main_max), xyB=(0.0, 1.0),
+                                         coordsA="data", coordsB="axes fraction",
+                                         axesA=ax_main, axesB=axins, color="black", linewidth=0.8, alpha=0.6)
+                # Unten-Rechts (klein) -> Unten-Links (groß, d.h. x=0.0, y=0.0 in axes fraction)
+                cp_bottom = ConnectionPatch(xyA=(x_main_max, y_main_min), xyB=(0.0, 0.0),
+                                            coordsA="data", coordsB="axes fraction",
+                                            axesA=ax_main, axesB=axins, color="black", linewidth=0.8, alpha=0.6)
+            else:
+                # --- GROSSE BOX LIEGT LINKS ---
+                # Verbinde die LINKEN Ecken der kleinen Box mit den RECHTEN Ecken der großen Box
+
+                # Oben-Links (klein) -> Oben-Rechts (groß, d.h. x=1.0, y=1.0 in axes fraction)
+                cp_top = ConnectionPatch(xyA=(x_main_min, y_main_max), xyB=(1.0, 1.0),
+                                         coordsA="data", coordsB="axes fraction",
+                                         axesA=ax_main, axesB=axins, color="black", linewidth=0.8, alpha=0.6)
+                # Unten-Links (klein) -> Unten-Rechts (groß, d.h. x=1.0, y=0.0 in axes fraction)
+                cp_bottom = ConnectionPatch(xyA=(x_main_min, y_main_min), xyB=(1.0, 0.0),
+                                            coordsA="data", coordsB="axes fraction",
+                                            axesA=ax_main, axesB=axins, color="black", linewidth=0.8, alpha=0.6)
+
+            # Linien dem Plot hinzufügen
+            ax_main.add_artist(cp_top)
+            ax_main.add_artist(cp_bottom)
 
         plt.show(block=False)
         plt.pause(0.1)
 
         # --- Interactive Terminal Loop ---
         print("\n--- Plot Editor ---")
-        print(" [Enter]    Save and continue")
+        print(" [save]     save and proceed")
+        print(" [Enter]    skip this plot")
         print(" [exit]     Abort batch evaluation")
-        print(" [box off]  Entfernt alle Zoom-Boxen")
+        print(" [box off]  Entfernt alle Zoom-Boxen, [peak off] NUR die peak box ")
         print(" Edit Box format: [box] [axis] [tmin] [tmax] [ymin]* [ymax]* [position]*")
         print("          *ymin, ymax und position sind optional.")
         print("          Verfügbare Positionen: upper-left, upper-right, lower-left, lower-right")
@@ -624,11 +741,29 @@ def plot_evaluation_results_interactive(
 
         if cmd == "exit":
             plt.close(fig)
+            box_config[group_name] = zooms
+            save_box_config(box_config)
             return 'exit'
 
-        elif cmd == "":
+            # Wenn der User einfach Enter drückt, ist er fertig mit der Gruppe!
+        if cmd == "":
+            # --- JETZT WIRD GESPEICHERT: Der User ist fertig und drückt Enter ---
+            box_config[group_name] = zooms
+            save_box_config(box_config)
+            print(f"   [✓] Finales Layout für '{group_name}' in JSON gespeichert.")
+
+            plt.close(fig)
+            return 'skipped'
+
+        elif cmd == "save":
+            # Falls du zusätzlich den PDF-Plot hart speichern willst, speichern wir auch die JSON
+            box_config[group_name] = zooms
+            save_box_config(box_config)
+            print(f"   [✓] Finales Layout für '{group_name}' in JSON gespeichert.")
+
             if save_path:
-                fig.savefig(save_path, dpi=300, bbox_inches='tight', format='pdf', metadata={'Creator': 'MyEvaluationTool'})
+                fig.savefig(save_path, dpi=300, bbox_inches='tight', format='pdf',
+                            metadata={'Creator': 'MyEvaluationTool'})
                 print(f"   [✓] Saved successfully to {save_path}")
             plt.close(fig)
             return 'saved'
@@ -636,10 +771,22 @@ def plot_evaluation_results_interactive(
         elif cmd == "box off":
             zooms.clear()
             print("   [i] Alle Zoom-Boxen wurden ausgeblendet.")
+            # Wir zeichnen den Plot neu ohne Boxen (falls du einen Replot-Trigger hast)
+            continue
 
         else:
             try:
                 parts = cmd.split()
+                box_name = parts[0]
+                # NEU: Prüfen, ob eine Box komplett aus- oder eingeschaltet werden soll
+                if box_name in zooms:
+                    if len(parts) >= 2 and parts[1] == 'off':
+                        zooms[box_name]['active'] = False
+                        continue  # Schleife neu starten (Plot wird ohne die Box neu gezeichnet)
+
+                    elif len(parts) >= 2 and parts[1] == 'on':
+                        zooms[box_name]['active'] = True
+                        continue
                 if len(parts) >= 4:
                     box_name, ax_idx = parts[0], int(parts[1])
                     tmin, tmax = float(parts[2]), float(parts[3])
@@ -660,6 +807,7 @@ def plot_evaluation_results_interactive(
                         print(
                             "   [!] Ignoriere fehlerhafte Y-Limit Parameter. (Gib entweder beide Y-Werte an oder keinen)")
 
+
                     # Falls der User die Boxen zuvor mit "box off" gelöscht hat,
                     # müssen wir sie wieder im Dictionary initialisieren:
                     if box_name in ['peak', 'flat']:
@@ -667,7 +815,7 @@ def plot_evaluation_results_interactive(
                             default_pos = POS_MAP['upper-left'] if box_name == 'peak' else POS_MAP['upper-right']
                             zooms[box_name] = {'pos': default_pos}
 
-                        # Neue Werte zuweisen
+                        # Neue Werte im Arbeitsspeicher zuweisen
                         zooms[box_name]['ax_idx'] = ax_idx
                         zooms[box_name]['xlim'] = [tmin, tmax]
                         zooms[box_name]['ylim'] = [ymin, ymax] if ymin is not None else None
@@ -676,15 +824,20 @@ def plot_evaluation_results_interactive(
                         if new_pos is not None:
                             zooms[box_name]['pos'] = new_pos
 
-                        print(f"Updating {box_name} box...")
+                        print(f"Updating {box_name} box in memory... (Press [Enter] to freeze and save to file)")
+
+                        # HINWEIS: Das automatische Speichern an dieser Stelle wurde entfernt!
+                        # Grund: Verhindert unvollständige oder fehlerhafte Zwischenstände in der Datei.
+
+                        # TIPP: Falls dein Skript den Plot live aktualisiert (z.B. via plt.draw()),
+                        # solltest du hier den Befehl zum interaktiven Auffrischen der Achsen platzieren.
+
                     else:
                         print("Invalid box name ('peak' or 'flat') or axis index (0 or 1).")
                 else:
                     print("Invalid format. Too few arguments.")
             except Exception as e:
                 print(f"Error parsing input: {e}. Please use the correct format.")
-
-
 
 
 # --- 3. HAUPTAUSWERTUNG ---
@@ -771,8 +924,8 @@ def main():
     target_group = eval_input[0]
     target_pads = eval_input[1].upper() if len(eval_input) >= 2 else "ALL"
 
-    data_dir = Path('path/to/SURF/20260310_Messung_4/20260310_messung4')
-    results_base_dir = Path('path/to/SURF/Paper_Ergebnisse')
+    data_dir = Path('paper_data')
+    results_base_dir = Path('paper_results')
     results_base_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\nStarte Verarbeitung für Gruppe: '{target_group.upper()}', Heatingpads: '{target_pads}'")
@@ -883,7 +1036,7 @@ def main():
         # Determine save directory
         out_dir = results_base_dir / gruppe_name / f"Group_Pads_{pad_status}"
         out_dir.mkdir(parents=True, exist_ok=True)
-        save_path = out_dir / f"{gruppe_name}_Combined_Evaluation.png"
+        save_path = out_dir / f"{gruppe_name}_Combined_Evaluation.pdf"
 
         # Korrekt: Verwende std_df und die Original-Spaltennamen
         std_trans = {
@@ -917,7 +1070,9 @@ def main():
         if session_result == 'exit':
             print("\nAbbruch durch Benutzer ('exit').")
             break  # Breaks out of the main batch loop completely
-
+        elif session_result == 'skipped':
+            print("Ohne speichern fortgefahren")
+            continue
 
 
 
