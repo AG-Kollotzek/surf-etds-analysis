@@ -9,7 +9,7 @@ from batch_evaluation import MEASUREMENT_10032026
 # KONFIGURATION
 # ==========================================
 BASE_EXPORT_DIR = Path("paper_data/process_export")
-DATA_DIR = Path("paper_data")  # Pfad zu den JSON/CSV Rohdaten anpassen
+DATA_DIR = Path("paper_data/full_raw")  # Pfad zu den JSON/CSV Rohdaten anpassen
 ALLOWED_GROUPS = ['All axes', 'Horizontal', 'Vertical', 'Rotation']
 
 # Die relevanten 7 Dimensionen
