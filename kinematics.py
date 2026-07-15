@@ -5,13 +5,13 @@ from scipy.optimize import minimize
 class SurfKinematics:
     def __init__(self):
         # 1. Konstanten & Bauteilmaße (Idealisiert, ohne Unsicherheiten)
-        self.hAxis_horizontal = 4.75 + 9.5 + 138 + 9.5 + 9.2 + 14.5
+        self.hAxis_horizontal = 24.25 + 147.4 + 9.2 + 14.5
         self.hAxis_vertical = 14.5 + 20 + 10
         self.hAxis_diagonal = np.sqrt(self.hAxis_horizontal ** 2 + self.hAxis_vertical ** 2)
 
         rotatationTable_height = 130
         phantomCenterDistance = 75
-        phantomToTableDistance = 21
+        phantomToTableDistance = 22
         self.sliderShift = 30 + 16
         self.radius = rotatationTable_height + phantomToTableDistance + phantomCenterDistance + self.sliderShift
 

@@ -7,16 +7,16 @@ import uncertainties.umath as umath
 class SurfKinematics:
     def __init__(self, err_linear=0.002, err_rot=0.1, err_couch=0.5):
         # 1. Konstanten & Bauteilmaße (mit Messunsicherheit der Schublehre in mm)
-        ERR = 0.05 #Standardfehler bei Schublehre
+        ERR = 0.1 #Standardfehler bei Schublehre
         # Hebel der H-Achse
-        self.hAxis_horizontal = ufloat(4.75, ERR) + ufloat(9.5, ERR) + ufloat(138, ERR) + ufloat(9.5, ERR) + ufloat(9.2, ERR) + ufloat(14.5, ERR)
-        self.hAxis_vertical = ufloat(14.5, ERR) + ufloat(20, ERR) + ufloat(10, ERR)
+        self.hAxis_horizontal = ufloat(24.25, 0.5) + ufloat(147.4, ERR) + ufloat(9.2, ERR) + ufloat(14.5, ERR) #Lot über gelenk bis zwei schraub-nüsse, schraubnüsse bis schienenende, Dicke schwarzes Metallstück, Drehpunkt bis Montage Geleknk
+        self.hAxis_vertical = ufloat(14.5, ERR) + ufloat(20, ERR) + ufloat(10, ERR) + ufloat(0.5, ERR) #Gelenk + Profil+ halbes profil + Gap(!)
         self.hAxis_diagonal = unp.sqrt(self.hAxis_horizontal ** 2 + self.hAxis_vertical ** 2)
 
         # Distanzen Phantom zu H-Schlitten in Home-Position
         rotatationTable_height = ufloat(130, ERR)
         phantomCenterDistance = ufloat(75, ERR)
-        phantomToTableDistance = ufloat(21, 0.5) #Nachmessen!
+        phantomToTableDistance = ufloat(22, 1) #Nachmessen!
         self.sliderShift = ufloat(30, ERR) + ufloat(16, ERR) # Abstand Unterkante zu achse # Hälfte des Schlittens (Schlitten fährt auf mittigem loch)
         self.radius = rotatationTable_height + phantomToTableDistance + phantomCenterDistance + self.sliderShift
 
@@ -46,7 +46,7 @@ class SurfKinematics:
         rollOffset = self.hAxis_horizontal - unp.sqrt(self.hAxis_diagonal ** 2 - (self.hAxis_vertical + v_u) **2) #Wie verschiebt sich die rollunterlage vom schlitten, je nach kippung?
         y_local = -(self.radius + self.hAxis_vertical) * unp.sin(pitch_rad_local) + rollOffset + ( h_u * unp.cos(pitch_rad_local))
         x_local = h_u * 0
-        z_local = - self.radius * (1 - unp.cos(pitch_rad_local)) + (h_u * unp.sin(pitch_rad_local))
+        z_local = self.radius * (1 - unp.cos(pitch_rad_local)) + (h_u * unp.sin(pitch_rad_local))
         yaw_deg_local = unp.degrees(r_u * unp.cos(pitch_rad_local))
         roll_deg_local = unp.degrees(r_u * unp.sin(pitch_rad_local))
 

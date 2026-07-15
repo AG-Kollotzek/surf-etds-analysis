@@ -122,7 +122,7 @@ def main():
         })
 
     df_final = pd.DataFrame(final_table)
-    df_final.to_csv("xray_verification_with_errors.csv", index=False)
+    df_final.to_csv("xray_verification_with_errors_new.csv", index=False)
     print("\nKalibriertabelle inklusive Fehlerfortpflanzung wurde als 'xray_verification_with_errors.csv' gespeichert.")
 
     # Kompakte Konsolenvorschau der wichtigsten Abweichungsspalten

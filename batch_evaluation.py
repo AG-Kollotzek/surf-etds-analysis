@@ -13,8 +13,9 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import gc
-# Ganz oben bei deinen anderen Imports einfügen:
+from datetime import datetime
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+from matplotlib.patches import ConnectionPatch
 
 # --- 1. KONFIGURATION & MESSDATEN-STRUKTUR ---
 
@@ -658,13 +659,21 @@ def plot_evaluation_results_interactive(
             axins.set_xticklabels([])
 
             # 2. mark_inset NUR noch für das Rechteck auf der Hauptachse nutzen
+            # 2. mark_inset NUR noch für das Rechteck auf der Hauptachse nutzen
             try:
-                rect, connects = mark_inset(ax_main, axins, loc1=1, loc2=2, fc="none", ec="black", lw=1)
-                # Wir machen ALLE automatischen Linien von mark_inset unsichtbar!
-                for c in connects:
-                    c.set_visible(False)
+                # Wir fangen die Rückgaben generisch ab (*_, um flexibel gegen Matplotlib-Updates zu sein)
+                inset_result = mark_inset(ax_main, axins, loc1=1, loc2=2, fc="none", ec="black", lw=1)
+
+                # Matplotlib gibt meistens (rect, connector_line1, connector_line2) zurück.
+                # Wir holen uns das Rechteck (erste Element) und blenden alle Verbindungslinien aus.
+                if isinstance(inset_result, tuple) and len(inset_result) >= 1:
+                    rect = inset_result[0]
+                    connects = inset_result[1:]
+                    for c in connects:
+                        c.set_visible(False)
             except Exception as e:
-                print(f"   [!] Fehler beim Zeichnen des Rechtecks für '{z_name}': {e}")
+                print(
+                    f"   [!] Fehler beim Zeichnen des Rechtecks für '{z_name}', weiche auf manuelles Rectangle aus: {e}")
                 from matplotlib.patches import Rectangle
                 xlim_main = axins.get_xlim()
                 ylim_main = axins.get_ylim()
@@ -672,8 +681,7 @@ def plot_evaluation_results_interactive(
                                  facecolor='none', edgecolor='black', linewidth=1)
                 ax_main.add_patch(rect)
 
-            # 3. DYNAMISCHE & KREUZUNGSFREIE VERBINDUNGSLINIEN
-            from matplotlib.patches import ConnectionPatch
+            # 3. DYNAMISCHE & KREUZUNGSFREIE VERBINDUNGSLINIEN (KORRIGIERT)
 
             # Grenzen der kleinen Box im Hauptplot (in Daten-Koordinaten)
             x_main_min, x_main_max = axins.get_xlim()
@@ -682,41 +690,42 @@ def plot_evaluation_results_interactive(
             # Mitte der kleinen Box auf der X-Achse berechnen
             x_main_center = (x_main_min + x_main_max) / 2.0
 
-            # Die Position der großen Zoom-Box (z_data['pos']) ist in "Axes Fraction" (0.0 bis 1.0)
-            # Wir wandeln die X-Mitte der großen Box in Daten-Koordinaten um, um sie direkt zu vergleichen!
-            trans_fraction_to_data = ax_main.transAxes + ax_main.transData.inverted()
+            # X-Mitte der großen Box in "Axes Fraction" (0.0 bis 1.0)
             x_box_center_fraction = z_data['pos'][0] + (z_data['pos'][2] / 2.0)
 
-            # Die Mitte der großen Box ausgedrückt in den echten Werten der X-Achse:
+            # Die Mitte der großen Box ausgedrückt in den echten Werten der X-Achse umrechnen
+            trans_fraction_to_data = ax_main.transAxes + ax_main.transData.inverted()
             x_box_center_data = trans_fraction_to_data.transform((x_box_center_fraction, 0.5))[0]
 
             # Vergleich: Liegt die große Zoom-Box RECHTS oder LINKS von der kleinen Box?
             if x_box_center_data > x_main_center:
                 # --- GROSSE BOX LIEGT RECHTS ---
-                # Verbinde die RECHTEN Ecken der kleinen Box mit den LINKEN Ecken der großen Box
+                # Verbinde die RECHTEN Kanten der kleinen Box mit den LINKEN Kanten der großen Box (axins)
 
-                # Oben-Rechts (klein) -> Oben-Links (groß, d.h. x=0.0, y=1.0 in axes fraction)
+                # Oben-Rechts (klein, data) -> Oben-Links (groß: x=0.0, y=1.0 in axes fraction)
                 cp_top = ConnectionPatch(xyA=(x_main_max, y_main_max), xyB=(0.0, 1.0),
                                          coordsA="data", coordsB="axes fraction",
                                          axesA=ax_main, axesB=axins, color="black", linewidth=0.8, alpha=0.6)
-                # Unten-Rechts (klein) -> Unten-Links (groß, d.h. x=0.0, y=0.0 in axes fraction)
+
+                # Unten-Rechts (klein, data) -> Unten-Links (groß: x=0.0, y=0.0 in axes fraction)
                 cp_bottom = ConnectionPatch(xyA=(x_main_max, y_main_min), xyB=(0.0, 0.0),
                                             coordsA="data", coordsB="axes fraction",
                                             axesA=ax_main, axesB=axins, color="black", linewidth=0.8, alpha=0.6)
             else:
                 # --- GROSSE BOX LIEGT LINKS ---
-                # Verbinde die LINKEN Ecken der kleinen Box mit den RECHTEN Ecken der großen Box
+                # Verbinde die LINKEN Kanten der kleinen Box mit den RECHTEN Kanten der großen Box (axins)
 
-                # Oben-Links (klein) -> Oben-Rechts (groß, d.h. x=1.0, y=1.0 in axes fraction)
+                # Oben-Links (klein, data) -> Oben-Rechts (groß: x=1.0, y=1.0 in axes fraction)
                 cp_top = ConnectionPatch(xyA=(x_main_min, y_main_max), xyB=(1.0, 1.0),
                                          coordsA="data", coordsB="axes fraction",
                                          axesA=ax_main, axesB=axins, color="black", linewidth=0.8, alpha=0.6)
-                # Unten-Links (klein) -> Unten-Rechts (groß, d.h. x=1.0, y=0.0 in axes fraction)
+
+                # Unten-Links (klein, data) -> Unten-Rechts (groß: x=1.0, y=0.0 in axes fraction)
                 cp_bottom = ConnectionPatch(xyA=(x_main_min, y_main_min), xyB=(1.0, 0.0),
                                             coordsA="data", coordsB="axes fraction",
                                             axesA=ax_main, axesB=axins, color="black", linewidth=0.8, alpha=0.6)
 
-            # Linien dem Plot hinzufügen
+            # Linien dem Hauptplot hinzufügen
             ax_main.add_artist(cp_top)
             ax_main.add_artist(cp_bottom)
 
@@ -1020,7 +1029,7 @@ def main():
             return np.interp(t_kin, csv_time, arr)
 
         # Dictionary structures for clean passing to plot function
-        trans_et = {'X': mean_df['lateral'].values, 'Y': mean_df['longitudinal'].values, 'Z': mean_df['vertical'].values}
+        trans_et = {'X': mean_df['lateral'].values, 'Y': mean_df['longitudinal'].values, 'Z': -mean_df['vertical'].values}
         trans_ihd = {'X': get_interp('True_Lateral'), 'Y': get_interp('True_Longitudinal'),
                      'Z': get_interp('True_Vertical')}
         rot_et = {'pitch': mean_df['pitch'].values, 'yaw': mean_df['yaw'].values, 'roll': mean_df['roll'].values}
@@ -1034,9 +1043,10 @@ def main():
         print(f"\nGeneriere Plot für {gruppe_name} (Pads: {pad_status})...")
 
         # Determine save directory
-        out_dir = results_base_dir / gruppe_name / f"Group_Pads_{pad_status}"
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        out_dir = results_base_dir / date_str / gruppe_name / f"Group_Pads_{pad_status}"
         out_dir.mkdir(parents=True, exist_ok=True)
-        save_path = out_dir / f"{gruppe_name}_Combined_Evaluation.pdf"
+        save_path = out_dir / f"{gruppe_name}_Combined_Evaluation_{date_str}.pdf"
 
         # Korrekt: Verwende std_df und die Original-Spaltennamen
         std_trans = {
