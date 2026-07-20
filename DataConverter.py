@@ -93,7 +93,7 @@ class ETDQAProcessor:
         # --- SMART SIGN CORRECTION ---t
         if self.terminal_version == 'legacy':
             # Korrektur für Longitudinal (H) und Rotation (R)
-            self.df_csv['Pos_H'] = self.df_csv['Pos_H'] * -1
+            #self.df_csv['Pos_H'] = self.df_csv['Pos_H'] * -1
             self.df_csv['Pos_R'] = self.df_csv['Pos_R'] * -1
             print(f"INFO: Legacy-Mode aktiv. Vorzeichen für Pos_H und Pos_R wurden invertiert.")
 

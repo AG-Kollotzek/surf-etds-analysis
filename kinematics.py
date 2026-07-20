@@ -36,7 +36,7 @@ class SurfKinematics:
         y_local = -(self.radius + self.hAxis_vertical) * np.sin(pitch_rad_local) + rollOffset + (
                     h_u * np.cos(pitch_rad_local))
         x_local = h_u * 0
-        z_local = -self.radius * (1 - np.cos(pitch_rad_local)) + (h_u * np.sin(pitch_rad_local))
+        z_local = self.radius * (1 - np.cos(pitch_rad_local)) + (h_u * np.sin(pitch_rad_local))
 
         yaw_deg_local = np.degrees(r_u * np.cos(pitch_rad_local))
         roll_deg_local = np.degrees(r_u * np.sin(pitch_rad_local))
