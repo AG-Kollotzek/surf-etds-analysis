@@ -2,8 +2,7 @@ import pandas as pd
 import numpy as np
 import json
 import plotly.graph_objects as go
-from kinematics import SurfKinematics as SurfKinematicsNominal
-from kinematics_werror import SurfKinematics
+from kinematics_werror_v2 import SurfKinematics, SurfKinematicsNominalV2
 from uncertainties import unumpy as unp
 import datetime
 import os
@@ -71,6 +70,117 @@ MEASUREMENT_10032026 = {
     '35': {'Gruppe': 'Vertical_Slide', 'Heatingpads': '32', 'ETD': '193801', 'CSV': '193557'},
 }
 
+# Groesste akzeptierte Abweichung des CSV/ETD-Sync-Abstands von 1.0 bei der automatischen
+# Paar-Auswahl. Die reine Uhrendrift liegt bei <0.3%; 5% laesst Luft und faengt trotzdem
+# jede Fehlpaarung ab (meas_34 waere sonst mit Faktor 1.37 durchgelaufen).
+SYNC_PAIR_MAX_DEVIATION = 0.05
+
+
+def _edge_crossing_time(t, L, i_lo, i_hi, level_from, level_to, frac):
+    """Zeitpunkt, zu dem das Signal zwischen zwei Niveaus den Anteil `frac` überschreitet.
+
+    Projiziert auf die Richtung (level_to - level_from), damit die Flanke auch dann sauber
+    bestimmt wird, wenn sich der Hub durch Achsen-Schiefstand über mehrere Kanäle verteilt
+    (im ETD-Signal ist der 5-mm-Puls der H-Achse oft nicht auf einen Kanal beschränkt).
+    Lineare Interpolation zwischen den Samples liefert Sub-Sample-Genauigkeit.
+    """
+    d = np.asarray(level_to, float) - np.asarray(level_from, float)
+    nd = np.linalg.norm(d)
+    if nd == 0:
+        return None
+    u = d / nd
+
+    sl = slice(max(0, i_lo), min(len(t), i_hi + 1))
+    proj = (L[sl] - np.asarray(level_from, float)) @ u
+    tt = t[sl]
+    target = frac * nd
+
+    for k in range(1, len(proj)):
+        a, b = proj[k - 1], proj[k]
+        if (a < target <= b) or (a > target >= b):
+            if b == a:
+                return float(tt[k])
+            f = (target - a) / (b - a)
+            return float(tt[k - 1] + f * (tt[k] - tt[k - 1]))
+    return None
+
+
+def find_sync_pulses(times, level, win_sec=0.4, flat_tol=0.4, min_dur=0.3, max_dur=5.0,
+                     level_tol=1.5, amp_min=2.5, amp_max=8.0, edge_frac=0.5):
+    """Findet die Sync-Pulse (kurzer 5-mm-Hub, der auf das Ausgangsniveau zurückkehrt)
+    und bestimmt ihre Ein-/Austritts-Flankenzeiten.
+
+    Plateaus werden über WERT-Stabilität erkannt (rollendes max-min < flat_tol), nicht über
+    eine Geschwindigkeitsschwelle. Das ist der entscheidende Unterschied zur früheren Version:
+    Differenzieren verstärkt hochfrequentes Rauschen überproportional. Beim Motor-Log (praktisch
+    rauschfrei) ist das harmlos, beim ETD-Tracking dagegen nicht - dort reichten einzelne
+    Rauschspitzen, um die Geschwindigkeitsschwelle zu überschreiten, obwohl die Position flach
+    war. Die Plateaugrenzen (und damit die Ausrichtung) wurden dadurch instabil.
+
+    Ein Sync-Puls ist ein kurzes Plateau, dessen Nachbar-Plateaus auf demselben Niveau liegen -
+    das unterscheidet ihn von einer Fahrt in die Messposition, die auf einem anderen Niveau endet.
+
+    times: 1D-Zeitachse, level: (N, k)-Array der Achsen/Kanäle.
+    Rückgabe je Puls: 'enter'/'exit' (Flankenzeiten, für das Alignment) sowie
+    'start'/'end'/'mid' (Plateaugrenzen bzw. -mitte, definieren das Messfenster).
+    """
+    t = np.asarray(times, dtype=float)
+    L = np.atleast_2d(np.asarray(level, dtype=float))
+    if L.shape[0] != len(t):
+        L = L.T
+
+    dt = np.median(np.diff(t))
+    w = max(3, int(round(win_sec / dt)))
+    if w % 2 == 0:
+        w += 1
+
+    df = pd.DataFrame(L)
+    spread = (df.rolling(w, center=True, min_periods=1).max()
+              - df.rolling(w, center=True, min_periods=1).min()).max(axis=1).values
+    flat = spread < flat_tol
+
+    edges = np.diff(flat.astype(int), prepend=0, append=0)
+    starts = np.where(edges == 1)[0]
+    ends = np.where(edges == -1)[0] - 1
+
+    plateaus = [[s, e, np.median(L[s:e + 1], axis=0)]
+                for s, e in zip(starts, ends) if t[min(e, len(t) - 1)] - t[s] > min_dur]
+
+    # Rauschen zerhackt lange Plateaus -> gleiche Niveaus wieder verschmelzen
+    merged = []
+    for p in plateaus:
+        if merged and np.linalg.norm(p[2] - merged[-1][2]) < level_tol:
+            merged[-1][1] = p[1]
+            merged[-1][2] = np.median(L[merged[-1][0]:p[1] + 1], axis=0)
+        else:
+            merged.append(p)
+
+    valid_peaks = []
+    for i in range(1, len(merged) - 1):
+        s, e, lvl = merged[i]
+        if not (min_dur <= t[e] - t[s] <= max_dur):
+            continue
+
+        prev_s, prev_e, prev_lvl = merged[i - 1]
+        next_s, next_e, next_lvl = merged[i + 1]
+        if np.linalg.norm(prev_lvl - next_lvl) > level_tol:
+            continue  # kein Rücksprung -> Fahrt in die Messposition, kein Sync-Puls
+
+        a_in = np.linalg.norm(lvl - prev_lvl)
+        a_out = np.linalg.norm(lvl - next_lvl)
+        if not (amp_min <= min(a_in, a_out) and max(a_in, a_out) <= amp_max):
+            continue
+
+        t_enter = _edge_crossing_time(t, L, prev_e, s, prev_lvl, lvl, edge_frac)
+        t_exit = _edge_crossing_time(t, L, e, next_s, lvl, next_lvl, edge_frac)
+        if t_enter is None or t_exit is None:
+            continue
+
+        valid_peaks.append({'enter': t_enter, 'exit': t_exit,
+                            'mid': (t[s] + t[e]) / 2.0, 'start': t[s], 'end': t[e]})
+    return valid_peaks
+
+
 class ETDQAProcessor:
     def __init__(self, terminal_version='legacy'):
         """
@@ -95,7 +205,7 @@ class ETDQAProcessor:
             # Korrektur für Longitudinal (H) und Rotation (R)
             #self.df_csv['Pos_H'] = self.df_csv['Pos_H'] * -1
             self.df_csv['Pos_R'] = self.df_csv['Pos_R'] * -1
-            print(f"INFO: Legacy-Mode aktiv. Vorzeichen für Pos_H und Pos_R wurden invertiert.")
+            print("INFO: Legacy-Mode aktiv. Vorzeichen für Pos_R wurde invertiert.")
 
         return self.df_csv
 
@@ -213,6 +323,238 @@ class ETDQAProcessor:
 
         print(f"Sync erfolgreich (Skalierung: {scale_factor:.6f}, Referenz-Peak: {csv_first:.2f}s)")
         return scale_factor
+
+    def align_and_crop_signals(self, measurement_group='mindev', pad_sec=5.0,
+                               pair_idx=None, couch_angle=0.0, refine=True):
+        """
+        1. Findet die Sync-Pulse in CSV und JSON (wert-basiert, siehe find_sync_pulses).
+        2. Berechnet Skalierungsfaktor und Offset aus den EINTRITTS-FLANKEN beider Pulse.
+        3. Skaliert die JSON-Zeitachse passend auf die CSV-Zeitachse.
+        4. Schneidet (croppt) beide DataFrames exakt auf [Peak_1 - pad_sec ... Peak_2 + pad_sec] zu.
+        5. Optional: Feinjustierung per Optimierung über die gesamte Kurve (refine=True,
+           standardmäßig aus - siehe _refine_time_alignment).
+        (Keine Baseline-Nullung!)
+
+        ABWEICHUNG VOM QA-REPO: refine ist hier standardmaessig AN, und die Referenzkurve
+        der Feinjustierung kommt aus SurfKinematicsNominalV2 statt aus dem veralteten
+        kinematics.py (dessen h*cos(pitch)-Term das falsche Vorzeichen hat und die
+        Horizontal-Laeufe spiegeln wuerde - siehe Docstring von SurfKinematicsNominalV2).
+
+        pair_idx: welches der (evtl. mehreren) Sync-Puls-Paare in einer geteilten CSV zu dieser
+        Messung gehört (0-basiert). Muss vom Aufrufer übergeben werden, wenn die CSV mehr als
+        ein Paar enthält (z.B. Couch-Rotations-Serie: eine CSV-Aufnahme deckt mehrere
+        ETD-Scans ab) - siehe etds_qa_evaluation.compute_pair_index, das die tatsächliche
+        Fahrreihenfolge aus den Config-IDs ableitet. Bewusst KEIN Wall-Clock-Abgleich der
+        Timestamps mehr: der bricht, sobald ein Peak in CSV oder JSON falsch/fehlend erkannt
+        wird (z.B. weil der Rücksprung-Puls durch Schiefstand einer Achse auf mehrere ETD-
+        Kanäle verteilt ist und nicht als eigenständiges Ereignis auftaucht) - dann verschieben
+        sich alle nachfolgenden Zeit-Offsets.
+
+        couch_angle: nur für die Fein-Optimierung in Schritt 5 relevant (dort wird intern,
+        unabhängig von apply_kinematics, eine schnelle fehlerfreie Referenzkurve berechnet -
+        die eigentliche kinematische Transformation für den Export passiert wie bisher separat
+        über apply_kinematics). refine=False deaktiviert Schritt 5 (z.B. zum Debuggen).
+        """
+
+        # --- 1. Sync-Pulse in CSV finden (Hardware-Achsen) ---
+        csv_peaks = find_sync_pulses(self.df_csv['Time_Sec'].values,
+                                     self.df_csv[['Pos_H', 'Pos_V', 'Pos_R']].values)
+
+        # --- 2. Sync-Pulse in JSON finden (ETD-Translationen) ---
+        json_peaks = find_sync_pulses(self.df_json['Time_Sec'].values,
+                                      self.df_json[['lateral', 'longitudinal', 'vertical']].values)
+
+        # --- 3. Welches Paar aus der CSV gehoert zu dieser Messung? ---
+        # Eine CSV-Aufnahme kann laenger laufen als der ETD-Scan bzw. mehrere Scans abdecken,
+        # dann enthaelt sie mehr als zwei Sync-Pulse (in dieser Kampagne: meas_19 mit 4,
+        # meas_34 mit 3). Das QA-Repo verlangt dafuer ein vom Aufrufer uebergebenes pair_idx
+        # und paart sonst stillschweigend Puls 0 mit Puls 1 - bei meas_34 ergibt das einen
+        # Skalierungsfaktor von 1.37 statt ~1.0, also eine voellig falsche Zeitachse, ohne
+        # jede Fehlermeldung.
+        #
+        # Stattdessen waehlen wir das Paar selbst, ueber das einzige belastbare Kriterium:
+        # beide Uhren laufen nominell gleich schnell, der Sync-Abstand muss in CSV und ETD
+        # also nahezu identisch sein. Wir nehmen das Paar mit dem Skalierungsfaktor, der 1.0
+        # am naechsten liegt, und melden es, wenn die Abweichung untypisch gross bleibt.
+        if len(json_peaks) < 2:
+            raise ValueError(f"Nicht genuegend Peaks in JSON! (Gefunden: {len(json_peaks)}, Erwartet: mind. 2)")
+        if len(csv_peaks) < 2:
+            raise ValueError(f"Nicht genuegend Peaks in CSV! (Gefunden: {len(csv_peaks)}, Erwartet: mind. 2)")
+
+        json_span = json_peaks[-1]['enter'] - json_peaks[0]['enter']
+
+        if pair_idx is None:
+            candidates = []
+            for i in range(len(csv_peaks)):
+                for j in range(i + 1, len(csv_peaks)):
+                    span = csv_peaks[j]['enter'] - csv_peaks[i]['enter']
+                    if span <= 0:
+                        continue
+                    candidates.append((abs(span / json_span - 1.0), i, j))
+            if not candidates:
+                raise ValueError("Kein brauchbares Sync-Puls-Paar in der CSV gefunden.")
+            dev, i_sel, j_sel = min(candidates)
+            if dev > SYNC_PAIR_MAX_DEVIATION:
+                raise ValueError(
+                    f"Kein CSV-Sync-Paar passt zur ETD-Dauer ({json_span:.1f}s): bestes Paar weicht "
+                    f"um {dev * 100:.1f}% ab (erlaubt {SYNC_PAIR_MAX_DEVIATION * 100:.0f}%). "
+                    f"Gefundene CSV-Pulse bei {[round(q['enter'], 2) for q in csv_peaks]}s.")
+            if len(csv_peaks) > 2:
+                print(f"   CSV enthaelt {len(csv_peaks)} Sync-Pulse - Paar ({i_sel}, {j_sel}) "
+                      f"gewaehlt (Skalierungs-Abweichung {dev * 100:.2f}%).")
+        else:
+            if int(pair_idx) < 0:
+                raise ValueError(f"pair_idx muss >= 0 sein (erhalten: {pair_idx}). Negative Werte "
+                                 f"wuerden per Python-Indexierung still die letzten Pulse waehlen.")
+            i_sel, j_sel = pair_idx * 2, pair_idx * 2 + 1
+            if len(csv_peaks) < j_sel + 1:
+                raise ValueError(
+                    f"Nicht genuegend Peaks in CSV! (Suche Paar {pair_idx + 1}, aber nur "
+                    f"{len(csv_peaks)} gefunden)")
+            # Ein explizit uebergebenes pair_idx wird genauso geprueft wie die automatische
+            # Auswahl - sonst umgeht ein falsch geratener Index still die Sicherheitsschwelle.
+            dev = abs((csv_peaks[j_sel]['enter'] - csv_peaks[i_sel]['enter']) / json_span - 1.0)
+            if dev > SYNC_PAIR_MAX_DEVIATION:
+                raise ValueError(
+                    f"pair_idx={pair_idx} ergibt eine Skalierungs-Abweichung von {dev * 100:.1f}% "
+                    f"(erlaubt {SYNC_PAIR_MAX_DEVIATION * 100:.0f}%) gegenueber der ETD-Dauer "
+                    f"({json_span:.1f}s). Vermutlich das falsche Sync-Puls-Paar.")
+
+        csv_first = csv_peaks[i_sel]
+        csv_last = csv_peaks[j_sel]
+        json_first = json_peaks[0]
+        json_last = json_peaks[-1]
+
+        # --- 4. Zeitskalierung & Alignment über die EINTRITTS-FLANKEN ---
+        # Verankert wird auf den Flanken (50%-Durchgang zwischen Ruhe- und Pulsniveau), nicht
+        # auf den Plateau-Mitten: die Flanke ist ein scharfes, schnelles Ereignis und dadurch
+        # deutlich präziser lokalisierbar als der Mittelpunkt eines Plateaus, dessen Grenzen
+        # vom Rauschen abhängen. Es wird KEINE Latenz angenommen - beide Systeme sehen dasselbe
+        # physikalische Ereignis, der verbleibende Zeitunterschied ist reiner PC-Uhren-Versatz.
+        scale_factor = ((csv_last['enter'] - csv_first['enter'])
+                        / (json_last['enter'] - json_first['enter']))
+        self.df_json['Time_Sec'] = ((self.df_json['Time_Sec'] - json_first['enter']) * scale_factor
+                                    + csv_first['enter'])
+
+        # --- 4b. Sync-Zeitstempel festhalten ---
+        # Die ETD-Rohzeiten werden mitgespeichert: damit lässt sich später ohne erneutes
+        # Alignment in die unveränderte TrackingResult-JSON zurückspringen.
+        # aligned_first_mid/aligned_last_mid definieren das Messfenster
+        # (siehe qa_metrics.measurement_window) und bleiben die Plateau-Mitten.
+        self.sync_info = {
+            'aligned_first_mid': float(csv_first['mid']),
+            'aligned_last_mid': float(csv_last['mid']),
+            'phantom_first_mid': float(csv_first['mid']),
+            'phantom_last_mid': float(csv_last['mid']),
+            'phantom_first_enter': float(csv_first['enter']),
+            'phantom_last_enter': float(csv_last['enter']),
+            'etd_raw_first_mid': float(json_first['mid']),
+            'etd_raw_last_mid': float(json_last['mid']),
+            'etd_raw_first_enter': float(json_first['enter']),
+            'etd_raw_last_enter': float(json_last['enter']),
+            'scale_factor': float(scale_factor),
+            'csv_pair_peaks': [int(i_sel), int(j_sel)],
+            'csv_n_peaks': int(len(csv_peaks)),
+            'alignment_anchor': 'enter_edge_50pct',
+        }
+
+        # Tracking Lost Zeiten mitskalieren
+        if hasattr(self, 'lost_times_sec') and self.lost_times_sec:
+            self.lost_times_aligned = [(t - json_first['enter']) * scale_factor + csv_first['enter']
+                                       for t in self.lost_times_sec]
+        else:
+            self.lost_times_aligned = []
+
+        # --- 5. Cropping: Exakt 5s vor dem ersten und 5s nach dem letzten Peak ---
+        crop_start = csv_first['mid'] - pad_sec
+        crop_end = csv_last['mid'] + pad_sec
+
+        self.df_csv = self.df_csv[
+            (self.df_csv['Time_Sec'] >= crop_start) & (self.df_csv['Time_Sec'] <= crop_end)].reset_index(drop=True)
+        self.df_json = self.df_json[
+            (self.df_json['Time_Sec'] >= crop_start) & (self.df_json['Time_Sec'] <= crop_end)].reset_index(drop=True)
+
+        if hasattr(self, 'lost_times_aligned'):
+            self.lost_times_aligned = [t for t in self.lost_times_aligned if crop_start <= t <= crop_end]
+
+        # --- 6. Feinjustierung über die gesamte zugeschnittene Kurve ---
+        if refine and len(self.df_csv) > 5 and len(self.df_json) > 5:
+            self._refine_time_alignment(couch_angle)
+            self.sync_info.update(self._refine_info)
+
+        print(
+            f"-> Alignment & Cropping erfolgreich (Scale: {scale_factor:.6f} | Spanne: {crop_start:.1f}s bis {crop_end:.1f}s). Keine Baseline-Korrektur.")
+        return scale_factor
+
+    def _refine_time_alignment(self, couch_angle, delta_scale_bound=0.03, delta_offset_bound=1.0):
+        """Feinjustiert Skala/Offset der (bereits grob ausgerichteten und zugeschnittenen)
+        JSON-Zeitachse per Least-Squares gegen die gesamte Longitudinal-Kurve statt nur gegen
+        die 2 Sync-Puls-Mittelpunkte. Grund: zwei unabhängig laufende PC-Uhren (SURF-Terminal,
+        ETD) driften auseinander - die 2-Punkt-Lösung korrigiert das nur im Mittel über die
+        ganze Messung, nicht an jeder einzelnen Stelle.
+
+        Gefittet wird gegen die Longitudinal-Kurve (Y). Das ist NICHT fuer jede Gruppe der
+        groesste Hub - bei der reinen Rotationsserie bewegt sich Y kaum, dort traegt praktisch nur
+        der Sync-Puls Zeitinformation. Y ist trotzdem der richtige Kanal: es ist der einzige
+        Freiheitsgrad, in den alle drei Achsen einkoppeln (H direkt, V ueber den Hebelarm, R ueber
+        die Kopplung), und damit der einzige, der ueber alle Messgruppen hinweg ueberhaupt ein
+        Signal hat. Wo Y flach ist, laeuft die Optimierung entsprechend ins Leere und liefert
+        delta_scale/delta_offset nahe null - siehe die ausgewiesenen refine_residual_before/after.
+
+        Nutzt intern SurfKinematicsNominalV2 (schnell, ohne Fehlerfortpflanzung) rein als
+        Referenzsignal fuer die Optimierung - berührt self.df_csv nicht und hat keinen Einfluss
+        auf die später separat aufgerufene apply_kinematics. Wichtig: bewusst V2, nicht das
+        veraltete kinematics.py des QA-Repos, dessen h*cos(pitch)-Term das falsche Vorzeichen hat
+        und die Horizontal-Laeufe spiegeln wuerde.
+        """
+        from scipy.optimize import minimize
+
+        nominal_kin = SurfKinematicsNominalV2()
+        res = nominal_kin.calculate_task_space(self.df_csv['Pos_H'].values, self.df_csv['Pos_V'].values,
+                                               self.df_csv['Pos_R'].values, couch_angle)
+        true_longitudinal = np.asarray(res['True_Longitudinal'], dtype=float)
+
+        t_csv = self.df_csv['Time_Sec'].values
+        t_json_orig = self.df_json['Time_Sec'].values
+        etd_longitudinal = self.df_json['longitudinal'].values
+        t_anchor = t_csv[0]
+
+        # Fit the SHAPE, not the level. The ETD reports displacement from its own reference
+        # surface capture, so a run that does not start at the kinematic home carries a large
+        # constant bias between the two traces (the vertical-slide series: ~66 mm). A plain
+        # sum-of-squares objective would then be dominated by that bias, and the optimiser would
+        # trade a bogus time shift against it - the fitted "clock drift" would be an artefact of a
+        # static offset. Removing the mean of both signals makes the objective offset-invariant,
+        # so only the timing can reduce it. For runs that do start at home the mean is ~0 and this
+        # changes nothing.
+        true_centred = true_longitudinal - np.mean(true_longitudinal)
+
+        def residual(params):
+            d_scale, d_offset = params
+            t_refined = (t_json_orig - t_anchor) * (1.0 + d_scale) + t_anchor + d_offset
+            interp = np.interp(t_csv, t_refined, etd_longitudinal)
+            return np.sum((interp - np.mean(interp) - true_centred) ** 2)
+
+        residual_before = residual([0.0, 0.0])
+        result = minimize(residual, x0=[0.0, 0.0], method='L-BFGS-B',
+                          bounds=[(-delta_scale_bound, delta_scale_bound),
+                                  (-delta_offset_bound, delta_offset_bound)])
+        d_scale, d_offset = result.x
+
+        self.df_json['Time_Sec'] = (t_json_orig - t_anchor) * (1.0 + d_scale) + t_anchor + d_offset
+        if hasattr(self, 'lost_times_aligned') and self.lost_times_aligned:
+            self.lost_times_aligned = [(t - t_anchor) * (1.0 + d_scale) + t_anchor + d_offset
+                                       for t in self.lost_times_aligned]
+
+        self._refine_info = {
+            'refine_delta_scale': float(d_scale),
+            'refine_delta_offset_sec': float(d_offset),
+            'refine_residual_before': float(residual_before),
+            'refine_residual_after': float(result.fun),
+        }
+        print(f"   Feinjustierung: delta_scale={d_scale:+.5f}, delta_offset={d_offset:+.3f}s "
+              f"(Residuum {residual_before:.1f} -> {result.fun:.1f})")
+
 
     def apply_baseline_and_crop(self):
         """Nullt die Achsen präzise an den Sync-Peaks und schneidet Vorlauf ab."""

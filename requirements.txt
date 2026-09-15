@@ -1,6 +1,9 @@
+# Analysis pipeline (paper_pipeline.py, paper_plots.py, qa_metrics.py, DataConverter.py,
+# kinematics_werror_v2.py, xray_verification_v2.py, export_bundle.py).
+# Python 3.9+.
 pandas
 numpy
 scipy
-plotly
-uncertainties
-pydantic  # Für saubere Datenstrukturen/Validierung der JSONs
+matplotlib        # all paper figures (paper_plots.py)
+uncertainties     # error propagation through the kinematic model
+plotly            # interactive sync-check plots in DataConverter / the legacy tools
