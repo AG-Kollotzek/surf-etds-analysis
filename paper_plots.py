@@ -402,7 +402,7 @@ def plot_three_panel(bundle, title, out_path, panel3='etd_rms', zoom_boxes=None,
         axes[2].fill_between(tr, res['rot_mean'] - res['rot_std'],
                              res['rot_mean'] + res['rot_std'],
                              color=C_RESID_ROT, alpha=0.2, linewidth=0)
-        axes[2].set_ylabel('|commanded $-$ measured| (mm / deg)')
+        axes[2].set_ylabel('3D position error (mm / deg)')
         axes[2].set_ylim(bottom=0)
 
     axes[2].set_xlabel('Time relative to first sync pulse (s)')
