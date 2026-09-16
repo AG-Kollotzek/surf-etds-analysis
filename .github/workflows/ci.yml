@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the data submodule
+        id: data
+        # surf-etds-data stays private until it is published; without access the smoke test is skipped.
+        continue-on-error: true
+        run: git submodule update --init surf-etds-data
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile
+        run: python -m compileall -q *.py legacy
+
+      - name: Import the active chain
+        run: python -c "import paper_pipeline, paper_plots, qa_metrics, DataConverter, kinematics_werror_v2, xray_verification_v2, export_bundle"
+
+      - name: Pipeline smoke test
+        if: steps.data.outcome == 'success'
+        run: |
+          python paper_pipeline.py --out "$RUNNER_TEMP/process_v2"
+          python xray_verification_v2.py
+          git diff --exit-code xray_verification_v2.csv

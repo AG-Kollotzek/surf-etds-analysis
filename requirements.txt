@@ -1,6 +1,6 @@
 # Analysis pipeline (paper_pipeline.py, paper_plots.py, qa_metrics.py, DataConverter.py,
 # kinematics_werror_v2.py, xray_verification_v2.py, export_bundle.py).
-# Python 3.9+.
+# Python 3.11 or later. Exact versions of a tested environment: requirements.lock.txt
 pandas
 numpy
 scipy

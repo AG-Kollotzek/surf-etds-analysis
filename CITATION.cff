@@ -1,0 +1,55 @@
+cff-version: 1.2.0
+title: "SURF ETD analysis pipeline"
+message: "If you use this software, please cite it as below, and cite the data with the citation of surf-etds-data."
+type: software
+authors:
+  - given-names: Tim
+    family-names: Buck
+    affiliation: "Medical University of Innsbruck"
+  # Further contributors are listed in CONTRIBUTORS.md.
+repository-code: "https://github.com/AG-Kollotzek/surf-etds-analysis"
+abstract: >-
+  Evaluation pipeline for the tracking accuracy of a surface-guided radiotherapy
+  system (ExacTrac Dynamic Surface) against a motorised 3-DOF phantom, the SURF
+  Test Unit: synchronisation of the two logs, calibrated forward kinematics with
+  uncertainty propagation, metrics over six degrees of freedom, statistics and
+  figures, and an independent radiographic check of the kinematic model.
+keywords:
+  - radiotherapy
+  - surface-guided radiotherapy
+  - SGRT
+  - quality assurance
+  - tracking accuracy
+  - medical physics
+# The code is MIT; the documentation and the result tables are CC-BY-4.0, as set out under license-url.
+license: MIT
+license-url: "https://github.com/AG-Kollotzek/surf-etds-analysis/blob/main/README.md#citing-contributors-licence"
+version: "1.0.0"
+references:
+  - type: data
+    title: "SURF-ETDS measurement data"
+    authors:
+      - given-names: Tim
+        family-names: Buck
+    repository-code: "https://github.com/AG-Kollotzek/surf-etds-data"
+    notes: >-
+      The raw data evaluated here (campaign 2026-03-10_L4), included as a git
+      submodule at the commit released as v1.0-paper-2026.
+  - type: software
+    title: "SURF Test Unit: a low-cost 3-DOF motion phantom for surface-guidance QA"
+    authors:
+      - given-names: Tim
+        family-names: Buck
+    repository-code: "https://github.com/AG-Kollotzek/surf-etds-phantom"
+    notes: >-
+      Firmware, measurement terminal and hardware of the phantom, and the log-format
+      specification.
+  - type: software
+    title: "SURF ETDS yearly QA"
+    authors:
+      - given-names: Tim
+        family-names: Buck
+    repository-code: "https://github.com/AG-Kollotzek/surf-etds-qa"
+    notes: >-
+      Clinical multi-linac QA with the same phantom; source of the calibrated
+      kinematic model and the numerical methodology ported here.

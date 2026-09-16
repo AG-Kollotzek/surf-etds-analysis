@@ -6,11 +6,12 @@ ExacTrac Dynamic (ETD) surface scanner tracks it; this repository compares what 
 measured against what the phantom was commanded to do, over all six degrees of freedom.
 
 It turns the ESTRO-ACROP Table 4 (D2) requirement *"tracking performance: 1 mm / 1°"* into an
-auditable number. Everything here runs from the raw measurement logs, which are included in full.
+auditable number. Everything here runs from the raw measurement logs, which come in full from the
+[`surf-etds-data`](https://github.com/AG-Kollotzek/surf-etds-data) repository.
 
-> **Part of a two-repository methodology.** This repository covers the **analysis**. The phantom
-> hardware, its firmware and the SURF logging terminal live in a separate repository — see
-> [Related repositories](#related-repositories).
+> **Part of the SURF-ETDS repositories.** This repository covers the **analysis**. The phantom
+> hardware, its firmware and the SURF logging terminal, and the raw measurement data live in separate
+> repositories — see [Related repositories](#related-repositories).
 
 ---
 
@@ -40,16 +41,19 @@ close to the measurement's own detection limit, and the lateral value is not wha
 ## Reproduce it
 
 ```bash
-python -m venv .venv && ./.venv/bin/pip install -r requirements.txt
+git clone --recurse-submodules https://github.com/AG-Kollotzek/surf-etds-analysis.git
+cd surf-etds-analysis
+python -m venv .venv && ./.venv/bin/pip install -r requirements.txt   # Python 3.11 or later
 
 python paper_pipeline.py        # 32 runs -> tables + 50 figures in paper_data/process_v2/  (~1 min)
 python xray_verification_v2.py  # independent radiographic check -> xray_verification_v2.csv
 python export_bundle.py         # optional: one sorted ZIP for handover
 ```
 
-Run from the repository root — every path is relative to it. The raw logs in `paper_data/full_raw/`
-(36 MB) must be present, so clone the repository properly; a shallow clone or a "Download ZIP" of
-the code alone will not work.
+Run from the repository root — every path is relative to it. The raw logs come from the
+`surf-etds-data` submodule (`surf-etds-data/campaigns/2026-03-10_L4/`, 36 MB), pinned to the commit
+released as `v1.0-paper-2026`. Clone with `--recurse-submodules`, or run `git submodule update --init` in an
+existing clone; a "Download ZIP" of the code alone will not work.
 
 The table above is `paper_data/process_v2/05_weighted_rmse_RT.csv` after the first command, so you
 can check your run reproduces it.
@@ -81,8 +85,8 @@ produced them no longer reproduce their numbers.
 | `kinematics_werror_v2.py` | Calibrated forward kinematics of the phantom, with uncertainty propagation. |
 | `xray_verification_v2.py` | Independent radiographic check of the kinematic model against X-ray sphere detection. |
 | `export_bundle.py` | Packs tables, figures and the X-ray table into one sorted ZIP for handover. Run the pipeline first. |
-| `paper_data/full_raw/` | **The measurement.** 38 ETD tracking JSON + 38 ETD preview PNG + 40 SURF terminal CSV. |
-| `Messung_Protokoll_10_03_2026.pdf` | Measurement protocol. The only source for the hand-transcribed X-ray readouts in `xray_verification_v2.py`. |
+| `surf-etds-data/` | **The measurement** (git submodule). Campaign `campaigns/2026-03-10_L4/`: 40 SURF terminal CSV in `phantom/`, 38 ETD tracking JSON + 38 ETD preview PNG in `etd/`, the run index `runs.csv`. |
+| `surf-etds-data/campaigns/2026-03-10_L4/protocol.md` | Measurement protocol (transcription). The source of the hand-transcribed X-ray readouts in `xray_verification_v2.py`, which are also tabulated in the campaign's `xray/exactrac_kv_readouts.csv`. |
 | `zoom_box_config_v2.json` | Zoom-inset windows for the figures. Auto-detected when absent; edit by hand to override. |
 | `zoom_box_config.json` | Belongs to `legacy/batch_evaluation.py`; kept in the root so that tool still finds it. |
 | `paper_data/process_export/` | Derived tree of the **previous** evaluation, kept as the pre-calibration comparison baseline. Not regenerable — see `legacy/README.md`. |
@@ -94,8 +98,8 @@ produced them no longer reproduce their numbers.
 
 One campaign, 2026-03-10, on an Elekta Versa HD. 32 evaluated runs in six groups — all axes,
 horizontal, vertical, rotation, variable speed, vertical slide — each recorded at room temperature
-and with the phantom's surface heated to 32 °C. `paper_data/full_raw/` additionally contains setup
-and X-ray logs that are not part of the 32 runs.
+and with the phantom's surface heated to 32 °C. The campaign folder additionally contains setup
+and X-ray logs that are not part of the 32 runs; its `runs.csv` says which file is which.
 
 Two systems log independently, with unsynchronised PC clocks: the SURF terminal writes the
 commanded axis positions, the ETD writes its measured pose. A 5 mm sync pulse at the start and end
@@ -169,12 +173,14 @@ Guards that stop a wrong number passing silently. Each is exercised by the campa
 
 | | |
 |---|---|
-| **Hardware, firmware, logging terminal** | Phantom mechanics and axes, motor control, the SURF terminal that writes the commanded-position logs, and the log-format specification. *Repository to be published — the link will appear here.* |
+| [`surf-etds-phantom`](https://github.com/AG-Kollotzek/surf-etds-phantom) | Phantom mechanics and axes, motor control, the SURF terminal that writes the commanded-position logs, and the log-format specification. |
+| [`surf-etds-data`](https://github.com/AG-Kollotzek/surf-etds-data) | The raw measurement data of all campaigns, with operators recorded as role codes; included here as a submodule. |
 | **This repository** | Synchronisation, kinematic model, metric definitions, statistics, figures. |
-| `surf-etds-qa` | The clinical, multi-linac QA application of the same phantom, with per-linac reports. Separate repository; its report machinery is deliberately **not** part of this one. |
+| [`surf-etds-qa`](https://github.com/AG-Kollotzek/surf-etds-qa) | The clinical, multi-linac QA application of the same phantom, with per-linac reports. Its report machinery is deliberately **not** part of this one. |
 
-The two repositories together form the methodology: the hardware repository defines how the
-measurement is produced and what the log columns mean; this one defines how it is evaluated.
+Together they form the methodology: the phantom repository defines how the measurement is produced
+and what the log columns mean, the data repository holds what was measured, and this one defines
+how it is evaluated.
 
 ---
 
@@ -195,6 +201,23 @@ numerical methodology from `surf-etds-qa`. In order of how much each change move
 Two defects were found and corrected while porting: `legacy/kinematics.py` carries an inverted
 `h·cos(pitch)` term relative to the rest of the model line, and a terminal log holding more than two
 sync pulses could be paired wrongly without any error. Both are described in `legacy/README.md`.
+The changes by release are in [`CHANGELOG.md`](CHANGELOG.md).
+
+---
+
+## Citing, contributors, licence
+
+Cite this repository with [`CITATION.cff`](CITATION.cff) (or GitHub's "Cite this repository"), and the
+data with the citation of `surf-etds-data`. Contributors are listed in [`CONTRIBUTORS.md`](CONTRIBUTORS.md).
+
+- **MIT** — the code ([`LICENSE`](LICENSE)).
+- **CC-BY-4.0** — the documentation, `xray_verification_v2.csv` and the tables in
+  `paper_data/process_export/` and `legacy/superseded_output/` ([`LICENSES/CC-BY-4.0.txt`](LICENSES/CC-BY-4.0.txt)).
+
+"ExacTrac" and "Brainlab" are trademarks of Brainlab AG, "Versa HD" and "Elekta" of Elekta AB; they are
+used nominatively, and neither company endorses or is affiliated with this work. The pipeline evaluates
+phantom measurements for research and quality assurance; it is not a medical device and not intended
+for clinical decisions.
 
 ---
 
@@ -203,5 +226,5 @@ sync pulses could be paired wrongly without any error. Both are described in `le
 Auswertungspipeline für die Tracking-Genauigkeit eines Oberflächenscanners (SGRT). Ein motorisiertes
 Phantom fährt bekannte Trajektorien, der ExacTrac-Dynamic-Scanner verfolgt es; dieses Repository
 vergleicht Soll und Ist über alle sechs Freiheitsgrade und macht aus der ESTRO-ACROP-Vorgabe
-„1 mm / 1°" eine überprüfbare Zahl. Rohdaten sind vollständig enthalten, alle Tabellen und Plots
+„1 mm / 1°" eine überprüfbare Zahl. Die Rohdaten kommen vollständig aus `surf-etds-data` (Submodule), alle Tabellen und Plots
 werden mit `python paper_pipeline.py` neu erzeugt.
