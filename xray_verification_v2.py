@@ -15,7 +15,7 @@ fixed here:
      already carries the correct - h*cos(pitch) term (the +h*cos(pitch) version survives only in
      the stale kinematics.py, which nothing in the production chain imports). Against the current
      model the -10 is simply wrong: the raw terminal log of this campaign
-     (paper_data/full_raw/csv/messung_20260310_172148.csv) shows the axis dwelled at
+     (surf-etds-data: campaigns/2026-03-10_L4/phantom/messung_20260310_172148.csv) shows the axis dwelled at
      Pos_H = +10.00 mm. Commanded values are therefore taken from the raw log rather than
      hard-coded, and verify_commanded_against_log() re-checks them in order on every run.
 
@@ -50,7 +50,7 @@ from uncertainties import unumpy as unp
 
 from kinematics_werror_v2 import SurfKinematics
 
-RAW_LOG_GLOB = 'paper_data/full_raw/**/*172148.csv'
+RAW_LOG_GLOB = 'surf-etds-data/campaigns/2026-03-10_L4/phantom/*172148.csv'
 OUT_CSV = 'xray_verification_v2.csv'
 
 # 1-sigma of a single ExacTrac coordinate. The readout is quoted to 0.1 mm; taking that as the

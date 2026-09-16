@@ -933,7 +933,7 @@ def main():
     target_group = eval_input[0]
     target_pads = eval_input[1].upper() if len(eval_input) >= 2 else "ALL"
 
-    data_dir = Path('paper_data/full_raw')
+    data_dir = Path('surf-etds-data/campaigns/2026-03-10_L4')
     results_base_dir = Path('paper_results')
     results_base_dir.mkdir(parents=True, exist_ok=True)
 

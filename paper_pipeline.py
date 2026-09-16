@@ -47,7 +47,8 @@ from DataConverter import ETDQAProcessor, MEASUREMENT_10032026
 import qa_metrics as qm
 import paper_plots as pp
 
-RAW_DIR = Path('paper_data/full_raw')
+# Raw data come from the surf-etds-data submodule (git submodule update --init).
+RAW_DIR = Path('surf-etds-data/campaigns/2026-03-10_L4')
 DEFAULT_OUT = Path('paper_data/process_v2')
 
 # The three isolated-axis campaigns that are combined into the single weighted bar chart.
@@ -64,12 +65,14 @@ def pads_folder(heatingpads):
 
 
 def find_raw_paths(meta):
-    """Locate the SURF terminal CSV and the ETD tracking JSON for one measurement entry."""
-    csv_hits = list(RAW_DIR.rglob(f"*{meta['CSV']}.csv"))
+    """Locate the SURF terminal CSV (phantom/) and the ETD tracking JSON (etd/) for one measurement entry."""
+    csv_hits = sorted((RAW_DIR / 'phantom').glob(f"*{meta['CSV']}.csv"))
     etd = meta['ETD']
-    json_hits = list(RAW_DIR.rglob(f"*{etd[:2]}-{etd[2:4]}-{etd[4:]}.json"))
-    if not csv_hits or not json_hits:
-        raise FileNotFoundError(f"raw data missing (CSV {meta['CSV']}, ETD {etd})")
+    json_hits = sorted((RAW_DIR / 'etd').glob(f"*{etd[:2]}-{etd[2:4]}-{etd[4:]}.json"))
+    if len(csv_hits) != 1 or len(json_hits) != 1:
+        raise FileNotFoundError(
+            f"expected exactly one raw file each (CSV {meta['CSV']}: {len(csv_hits)}, ETD {etd}: {len(json_hits)}) "
+            f"in {RAW_DIR}; run 'git submodule update --init'")
     return str(csv_hits[0]), str(json_hits[0])
 
 
