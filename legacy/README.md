@@ -10,15 +10,16 @@ The active chain lives in the repository root: `paper_pipeline.py`, `paper_plots
 
 ## Running these
 
-File contents are unchanged, so their imports still assume everything sits in one directory. Run
+File contents are unchanged except for local absolute paths, which now read `path/to/...` and must be
+set to wherever the data are. Their imports still assume everything sits in one directory. Run
 them from the **repository root** with both directories on the path:
 
 ```bash
 PYTHONPATH=.:legacy python legacy/batch_evaluation.py
 ```
 
-They also resolve `paper_data/` relative to the working directory, so the repository root is the
-only place they work from.
+They also resolve `paper_data/` and the `surf-etds-data` submodule relative to the working directory,
+so the repository root is the only place they work from.
 
 ## What is here, and why it was superseded
 
@@ -44,7 +45,8 @@ Results produced by the scripts above, kept only for comparison:
   the repository root and look under `paper_data/process_v2/`.
 - `xray_verification_*.csv` — four generations of the X-ray table, all built with the
   uncalibrated kinematics. Superseded by `xray_verification_v2.csv` in the root.
-- `paper_results.zip` — archive of the earlier figure set (the eight `first_try` PDFs).
+- `paper_results.zip` (the eight `first_try` figures) is no longer kept: the archive also held macOS
+  metadata files. The figures remain in the repository history under `paper_results/first_try/`.
 - `paper_results_legacy.zip` — the 20 dated figure PDFs that used to sit in `paper_results/`.
   They are archived rather than kept loose because they cannot be regenerated: their producer,
   `batch_evaluation.py`, only writes a PDF when an operator types `save` into its interactive

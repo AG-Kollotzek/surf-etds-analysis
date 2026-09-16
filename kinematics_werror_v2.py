@@ -20,9 +20,9 @@ import uncertainties.umath as umath
 # Der Wert geht additiv in `radius` und damit ausschliesslich in y_local/z_local ein; die
 # Winkelformeln (alpha_offset, pitch_rad_local, hAxis_diagonal) enthalten `radius` nicht und
 # bleiben unveraendert. Das ist bewusst so: geometry_diagnostic.py hat die Winkelgeometrie als
-# unauffaellig bestaetigt (Baseline 0.04+/-0.04 deg bei V=0, Steigung 0.999-1.034), und eine
+# unauffaellig bestaetigt (surf-etds-qa; Baseline 0.04+/-0.04 deg bei V=0, Steigung 0.999-1.034), und eine
 # Korrektur ueber hAxis_vertical haette den Fit verschlechtert (RMS 0.500 statt 0.186 mm) UND
-# pitch um bis zu 0.13 deg verschoben. Details siehe radius_calibration.py.
+# pitch um bis zu 0.13 deg verschoben. Details siehe radius_calibration.py in surf-etds-qa.
 #
 # Die SD ueber die vier Linacs dient als Unsicherheit - sie deckt die Streuung zwischen den
 # Standorten ab und ist damit konservativer als der Fit-Fehler einer einzelnen Messreihe.
@@ -87,7 +87,7 @@ class SurfKinematics:
         phantomToTableDistance = ufloat(21, 1) + ufloat(1, ERR) # Nachmessen, passt !
         self.sliderShift = ufloat(46, ERR)
 
-        # Empirische Radius-Kalibrierung (siehe radius_calibration.py und SD_CALIB_DEFAULT):
+        # Empirische Radius-Kalibrierung (siehe radius_calibration.py in surf-etds-qa und SD_CALIB_DEFAULT):
         # rein additiver Hebelarm-Zuschlag, greift NUR in die Translation (y/z), nicht in die
         # Winkelformeln. sd_calib=0 liefert das unkalibrierte Modell (fuer Diagnose/Reproduktion).
         self.sd_calib = SD_CALIB_DEFAULT if sd_calib is None else sd_calib

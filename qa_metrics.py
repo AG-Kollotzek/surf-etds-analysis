@@ -1,6 +1,6 @@
 """Numerical evaluation of ETD tracking (measured) against SURF phantom kinematics (commanded).
 
-Ported from surf-etds-qa/qa_metrics.py - that repo carries the more recent, corrected
+Ported from surf-etds-qa (qa_metrics.py) - that repo carries the more recent, corrected
 methodology. Deliberately NOT ported: the QA-report machinery (pass/watch/act classification,
 tolerance tables, per-linac report tables, PDF layout). This repository stays a paper-figure and
 statistics pipeline; the tolerance verdicts belong to the QA repo.
