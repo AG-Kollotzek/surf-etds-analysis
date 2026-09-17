@@ -52,7 +52,7 @@ python export_bundle.py         # optional: one sorted ZIP for handover
 
 Run from the repository root — every path is relative to it. The raw logs come from the
 `surf-etds-data` submodule (`surf-etds-data/campaigns/2026-03-10_L4/`, 36 MB), pinned to the commit
-released as `v1.0-paper-2026`. Clone with `--recurse-submodules`, or run `git submodule update --init` in an
+released as `v1.0.0`. Clone with `--recurse-submodules`, or run `git submodule update --init` in an
 existing clone; a "Download ZIP" of the code alone will not work.
 
 The table above is `paper_data/process_v2/05_weighted_rmse_RT.csv` after the first command, so you

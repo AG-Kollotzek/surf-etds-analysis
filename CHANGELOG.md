@@ -3,7 +3,7 @@
 ## 1.0.0 — prepared for publication (September 2026)
 
 - The raw data moved to the [`surf-etds-data`](https://github.com/AG-Kollotzek/surf-etds-data) repository,
-  included as a submodule at the commit released as `v1.0-paper-2026`. `paper_pipeline.py` and `xray_verification_v2.py`
+  included as a submodule at the commit released as `v1.0.0`. `paper_pipeline.py` and `xray_verification_v2.py`
   read campaign `2026-03-10_L4` from there; the numbers do not change.
 - The measurement protocol is published as a transcription in the data repository; the PDF is no longer here.
 - Licence files, citation metadata, contributors and continuous integration added.

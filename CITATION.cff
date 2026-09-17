@@ -5,7 +5,19 @@ type: software
 authors:
   - given-names: Tim
     family-names: Buck
-    affiliation: "Medical University of Innsbruck"
+    affiliation: "Department of Radiation Oncology, Medical University of Innsbruck"
+  - given-names: N.
+    family-names: Bersenkowitsch
+    affiliation: "Department of Radiation Oncology, Tirol Kliniken"
+  - given-names: L.
+    family-names: Bodner
+    affiliation: "Department of Radiation Oncology, Tirol Kliniken"
+  - given-names: U.
+    family-names: Ganswindt
+    affiliation: "Department of Radiation Oncology, Medical University of Innsbruck"
+  - given-names: S.
+    family-names: Kollotzek
+    affiliation: "Department of Radiation Oncology, Medical University of Innsbruck"
   # Further contributors are listed in CONTRIBUTORS.md.
 repository-code: "https://github.com/AG-Kollotzek/surf-etds-analysis"
 abstract: >-
@@ -29,12 +41,25 @@ references:
   - type: data
     title: "SURF-ETDS measurement data"
     authors:
-      - given-names: Tim
-        family-names: Buck
+    - given-names: Tim
+      family-names: Buck
+      affiliation: "Department of Radiation Oncology, Medical University of Innsbruck"
+    - given-names: N.
+      family-names: Bersenkowitsch
+      affiliation: "Department of Radiation Oncology, Tirol Kliniken"
+    - given-names: L.
+      family-names: Bodner
+      affiliation: "Department of Radiation Oncology, Tirol Kliniken"
+    - given-names: U.
+      family-names: Ganswindt
+      affiliation: "Department of Radiation Oncology, Medical University of Innsbruck"
+    - given-names: S.
+      family-names: Kollotzek
+      affiliation: "Department of Radiation Oncology, Medical University of Innsbruck"
     repository-code: "https://github.com/AG-Kollotzek/surf-etds-data"
     notes: >-
       The raw data evaluated here (campaign 2026-03-10_L4), included as a git
-      submodule at the commit released as v1.0-paper-2026.
+      submodule at the commit released as v1.0.0.
   - type: software
     title: "SURF Test Unit: a low-cost 3-DOF motion phantom for surface-guidance QA"
     authors:
